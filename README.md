@@ -1,5 +1,7 @@
 # HexaGen PHP Framework ⚡
 
+> 📖 **Readme versions**: [English Version](README.en.md) | [Versión en Español](README.md)
+
 **HexaGen PHP Framework** es un micro-framework PHP 8.3+ ultra-ligero y de alto rendimiento, diseñado específicamente para brillar bajo el motor de **FrankenPHP** mediante arquitectura de **Slices Verticales** (Vertical Slices) y aplicando estrictamente principios **SOLID**.
 
 Evita el acoplamiento y el peso innecesario de Doctrine o Eloquent utilizando **HexaORM**, un ORM activo y directo sobre PDO nativo.
