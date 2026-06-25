@@ -2,245 +2,608 @@
 
 > 📖 **Readme versions**: [English Version](README.en.md) | [Versión en Español](README.md)
 
-**HexaGen PHP Framework** es un micro-framework PHP 8.3+ ultra-ligero y de alto rendimiento, diseñado específicamente para brillar bajo el motor de **FrankenPHP** mediante arquitectura de **Slices Verticales** (Vertical Slices) y aplicando estrictamente principios **SOLID**.
+**HexaGen PHP Framework** es un framework PHP 8.3+ de alto rendimiento, diseñado específicamente para brillar bajo el motor de **FrankenPHP** mediante arquitectura de **Slices Verticales** y aplicando principios **SOLID** de forma estricta.
 
-Evita el acoplamiento y el peso innecesario de Doctrine o Eloquent utilizando **HexaORM**, un ORM activo y directo sobre PDO nativo.
-
----
-
-## 🏗️ Arquitectura y Estructura de Directorios
-
-La estructura de carpetas de HexaGen promueve que toda la lógica de una funcionalidad de negocio se autocontenga en un único Slice Vertical, en lugar de separarse en directorios globales:
-
-```
-hexagenphp_framework/
-├── bin/
-│   └── hexaphp            # Wrapper opcional del ejecutable CLI
-├── public/
-│   └── index.php          # Bucle Worker Loop para FrankenPHP & Fallback
-├── src/
-│   ├── Core/              # Núcleo del Framework (Inyección de Dependencias, Kernel, ORM)
-│   │   ├── Console/       # Comandos del CLI hexaphp
-│   │   ├── Controller/    # Controlador Abstracto base
-│   │   ├── Database/      # Capa de Abstracción de Datos (HexaORM)
-│   │   └── Kernel.php     # Orquestador principal (Symfony Container & Routing)
-│   └── Slices/            # Aquí viven tus Slices Verticales (Vuelos, Hoteles, etc.)
-│       └── [Nombre]/
-│           ├── Controller/ # Controladores específicos de la funcionalidad
-│           ├── Domain/     # Modelos / Entidades de Negocio (HexaORM)
-│           ├── Routes.php  # Mapeo de rutas local del Slice
-│           └── Services.php# Registro de dependencias local en el DIC
-├── composer.json          # Gestión de dependencias (Symfony Core Components)
-├── hexaphp                # Ejecutable CLI principal
-└── database.sqlite        # Base de datos SQLite local (creada dinámicamente)
-```
+Evita el acoplamiento y el peso innecesario de Doctrine o Eloquent usando **HexaORM**, un ORM Active Record directo sobre PDO nativo.
 
 ---
 
-## 🛠️ Requisitos e Instalación
+## Instalación
 
-1. **PHP 8.3 o superior** (el framework aprovecha características modernas de tipado y atributos).
-2. **Composer** (para descargar los componentes esenciales de Symfony).
-
-Para iniciar el entorno local por primera vez, ejecuta:
 ```bash
-composer install
-```
-
-*Nota: Durante el desarrollo en Windows/Linux, si no cuentas con el binario de **FrankenPHP**, el comando `server:start` te ofrecerá descargarlo e instalarlo de forma 100% automática.*
-
----
-
-## 💻 Herramientas de Consola (`hexaphp`)
-
-El CLI `hexaphp` expone comandos listos para mejorar la experiencia de desarrollo (DX):
-
-### 1. Generar un Slice Vertical
-Crea una estructura completa y lista para usar de una funcionalidad vertical con su propio controlador, modelo de dominio, rutas y servicios:
-```bash
-php hexaphp make:slice [Nombre]
-```
-*Ejemplo:* `php hexaphp make:slice Vuelos`
-> **Automatización DX:** Si estás usando SQLite para desarrollo local, este comando creará automáticamente la tabla correspondiente en la base de datos con campos por defecto (`id`, `name`, `created_at`).
-
-### 2. Levantar el Servidor FrankenPHP en modo Worker
-Inicia el servidor FrankenPHP de alto rendimiento en modo Worker y con recarga en caliente (watch) activada:
-```bash
+composer create-project rbaezc/hexagenphp-framework mi-app
+cd mi-app
+cp .env.example .env
+php hexaphp migrate
 php hexaphp server:start
 ```
-*   **Host por defecto:** `http://127.0.0.1:8080`
-*   **Hot-Reload:** Observa cambios en archivos `.php` y `.env` y reinicia el servidor automáticamente sin perder el estado de memoria en peticiones intermedias.
 
 ---
 
-## 🏎️ El Bucle Mágico de FrankenPHP (Worker Loop)
+## Arquitectura
 
-El punto de entrada `public/index.php` mantiene el framework cargado en memoria, eliminando el coste de arranque (bootstrap) de PHP en cada petición:
-
-```php
-// public/index.php
-require_once __DIR__ . '/../vendor/autoload.php';
-
-// 1. Inicializas el núcleo de tu Framework UNA SOLA VEZ
-$kernel = new HexaGen\Core\Kernel();
-$kernel->boot();
-
-if (function_exists('frankenphp_handle_request')) {
-    // 2. Este es el bucle mágico que mantiene a tu framework vivo en memoria
-    $maxRequests = 1000;
-    for ($nbRequests = 0; frankenphp_handle_request() && $nbRequests < $maxRequests; ++$nbRequests) {
-        
-        $request = Symfony\Component\HttpFoundation\Request::createFromGlobals();
-        $response = $kernel->handle($request);
-        $response->send();
-        
-        // Limpieza rápida post-petición
-        $kernel->terminate($request, $response);
-        
-        // Prevenir fugas de memoria
-        gc_collect_cycles();
-    }
-} else {
-    // Fallback de desarrollo para servidores tradicionales (CGI, Apache/Nginx, php -S)
-    $request = Symfony\Component\HttpFoundation\Request::createFromGlobals();
-    $response = $kernel->handle($request);
-    $response->send();
-    $kernel->terminate($request, $response);
-}
+```
+mi-app/
+├── public/index.php          # Worker Loop FrankenPHP + fallback tradicional
+├── src/
+│   ├── Core/                 # Núcleo del framework
+│   └── Slices/               # Tus funcionalidades verticales
+│       └── [Nombre]/
+│           ├── Controller/
+│           ├── Domain/
+│           ├── Routes.php
+│           └── Services.php
+├── config/                   # Configuración por módulo
+├── database/
+│   ├── migrations/
+│   ├── factories/
+│   └── seeders/
+├── lang/                     # Archivos de idioma
+├── resources/views/          # Templates Twig
+├── storage/                  # Archivos subidos, caché, logs
+└── hexaphp                   # CLI principal
 ```
 
 ---
 
-## 💾 HexaORM (Abstracción PDO ultra-rápida)
+## Características
 
-En lugar de cargar con el peso y configuración de Doctrine o Eloquent, **HexaORM** implementa el patrón **Active Record** de forma ligera sobre prepared statements de PDO.
+### Routing
+- GET, POST, PUT, PATCH, DELETE, ANY
+- Grupos de rutas con prefijo, middleware y namespace
+- Rutas nombradas + generación de URLs con `route()`
+- Resource routes (CRUD automático)
+- Route model binding
 
-### Consultas:
 ```php
-use HexaGen\Slices\Vuelos\Domain\Vuelo;
+Route::get('/vuelos', [VuelosController::class, 'index'])->name('vuelos.index');
 
-// Obtener todos los vuelos (retorna un array de objetos Vuelo)
+Route::group(['prefix' => '/api', 'middleware' => ['auth:jwt']], function () {
+    Route::resource('/vuelos', VuelosController::class);
+});
+```
+
+---
+
+### HexaORM
+
+```php
+// Consultas
 $vuelos = Vuelo::all();
+$vuelo  = Vuelo::find(1);
+$vuelo  = Vuelo::findOrFail(1);
 
-// Encontrar por Clave Primaria (retorna objeto Vuelo o null)
-$vuelo = Vuelo::find(1);
+// QueryBuilder
+Vuelo::query()
+    ->select(['id', 'origen', 'destino', 'precio'])
+    ->where('precio', '<', 500)
+    ->orWhere('clase', 'business')
+    ->whereIn('aerolinea_id', [1, 2, 3])
+    ->orderBy('precio', 'ASC')
+    ->paginate(20);
 
-// Consulta personalizada usando el QueryBuilder interno
-$vuelosBaratos = Vuelo::where('precio', 200, '<')->orderBy('precio', 'ASC')->get();
-```
+// Creación / actualización
+$vuelo = Vuelo::create(['origen' => 'MEX', 'destino' => 'MAD', 'precio' => 350]);
+$vuelo->update(['precio' => 299]);
+Vuelo::updateOrCreate(['origen' => 'MEX', 'destino' => 'MAD'], ['precio' => 299]);
 
-### Inserción / Actualización:
-```php
-$vuelo = new Vuelo();
-$vuelo->name = "Vuelo a Madrid";
-$vuelo->created_at = date('Y-m-d H:i:s');
-$vuelo->save(); // Inserta en BD y asigna la ID autogenerada al objeto
-
-// Editar
-$vuelo->name = "Vuelo a Barcelona";
-$vuelo->save(); // Hace update en la BD
-```
-
-### Eliminación:
-```php
+// Eliminación
 $vuelo->delete();
+
+// Agregados
+$total    = Vuelo::query()->count();
+$promedio = Vuelo::query()->where('clase', 'economy')->avg('precio');
+$existe   = Vuelo::query()->where('destino', 'MAD')->exists();
 ```
 
-### Relaciones (Eager Loading sin N+1) 🔗
-Para evitar el problema de las consultas N+1 de manera estricta y transparente, HexaORM implementa relaciones precargadas en exactamente **2 consultas** usando `WHERE IN` por debajo, sin mágicas e ineficientes consultas tardías (Lazy Loading).
-
-#### Definir relaciones en el Modelo:
+#### Relaciones
 ```php
-use HexaGen\Core\Database\Model;
-use HexaGen\Core\Database\Relations\BelongsTo;
-use HexaGen\Core\Database\Relations\HasMany;
-
 class Aerolinea extends Model
 {
-    public function vuelos(): HasMany
-    {
-        return $this->hasMany(Vuelo::class, 'aerolinea_id');
-    }
+    public function vuelos(): HasMany      { return $this->hasMany(Vuelo::class, 'aerolinea_id'); }
+    public function pais(): BelongsTo     { return $this->belongsTo(Pais::class); }
+    public function hub(): HasOne         { return $this->hasOne(Aeropuerto::class); }
 }
 
+// Eager loading en exactamente 2 queries (sin N+1)
+$aerolineas = Aerolinea::query()->with('vuelos', 'pais')->get();
+
+// Eager loading con constraints
+$aerolineas = Aerolinea::query()->with([
+    'vuelos' => fn($q) => $q->where('clase', 'business')->orderBy('precio')
+])->get();
+```
+
+**Relaciones disponibles:** `hasOne`, `hasMany`, `belongsTo`, `belongsToMany`, `hasOneThrough`, `hasManyThrough`, `morphOne`, `morphMany`, `morphTo`
+
+#### Traits de Modelo
+```php
 class Vuelo extends Model
 {
-    public function aerolinea(): BelongsTo
-    {
-        return $this->belongsTo(Aerolinea::class, 'aerolinea_id');
+    use HasTimestamps;   // created_at / updated_at automáticos
+    use SoftDeletes;     // deleted_at — no borra físicamente
+    use HasCasts;        // cast automático de tipos
+    use HasScopes;       // scopes locales y globales
+    use HasObservers;    // hooks created/updated/deleted
+    use HasFactory;      // Vuelo::factory()->create()
+
+    protected static array $fillable = ['origen', 'destino', 'precio', 'clase'];
+    protected static array $casts    = ['precio' => 'float', 'activo' => 'bool'];
+}
+```
+
+---
+
+### Migraciones
+
+```bash
+php hexaphp migrate              # Corre migraciones pendientes
+php hexaphp migrate:rollback     # Revierte el último batch
+php hexaphp migrate:rollback --step=3
+php hexaphp migrate:fresh        # Drop all + re-run
+php hexaphp migrate:status       # Muestra estado (Ran / Pending)
+```
+
+```php
+// database/migrations/2024_01_01_create_vuelos_table.php
+return new class extends Migration {
+    public function up(\PDO $pdo): void {
+        $pdo->exec("CREATE TABLE vuelos (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            origen    VARCHAR(3) NOT NULL,
+            destino   VARCHAR(3) NOT NULL,
+            precio    DECIMAL(10,2),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )");
+    }
+    public function down(\PDO $pdo): void {
+        $pdo->exec("DROP TABLE IF EXISTS vuelos");
+    }
+};
+```
+
+---
+
+### Autenticación & Autorización
+
+```php
+// Session guard
+auth()->attempt(['email' => $email, 'password' => $password]);
+auth()->user();
+auth()->logout();
+
+// JWT guard
+auth('jwt')->attempt($credentials);
+$token = auth('jwt')->token();
+
+// Gate / Policies
+Gate::define('editar-vuelo', fn($user, $vuelo) => $user->id === $vuelo->user_id);
+
+if (Gate::allows('editar-vuelo', $vuelo)) { /* ... */ }
+// o en controlador:
+$this->authorize('editar-vuelo', $vuelo);
+```
+
+Middlewares disponibles: `auth`, `auth:jwt`, `guest`, `authorize:permiso`
+
+---
+
+### Validación
+
+```php
+class CrearVueloRequest extends FormRequest
+{
+    public function rules(): array {
+        return [
+            'origen'  => 'required|min:3|max:3',
+            'destino' => 'required|min:3|max:3|different:origen',
+            'precio'  => 'required|numeric|min:0',
+            'clase'   => 'required|in:economy,business,first',
+            'fecha'   => 'required|date|after:today',
+            'email'   => 'required|email|unique:vuelos,email',
+        ];
+    }
+
+    public function messages(): array {
+        return ['origen.required' => 'El origen es obligatorio.'];
     }
 }
 ```
 
-#### Consultar relaciones (Eager Loading):
-```php
-// Trae todos los vuelos y sus aerolíneas asociadas en exactamente 2 consultas SQL en total:
-$vuelos = Vuelo::query()->with('aerolinea')->get();
+**Reglas disponibles:** `required`, `nullable`, `sometimes`, `string`, `numeric`, `integer`, `boolean`, `array`, `email`, `url`, `min`, `max`, `between`, `size`, `in`, `not_in`, `same`, `different`, `confirmed`, `unique`, `exists`, `required_if`, `after`, `before`, `starts_with`, `ends_with`, `accepted`, `ip`, `ipv4`, `ipv6`, `uuid`, `json`, `digits`, `digits_between`
 
-foreach ($vuelos as $vuelo) {
-    echo $vuelo->name . " pertenece a " . $vuelo->aerolinea->name;
+---
+
+### Correo
+
+```php
+// app/Mail/BienvenidaMail.php
+class BienvenidaMail extends Mailable
+{
+    public function build(): static {
+        return $this->subject('Bienvenido')
+                    ->view('emails.bienvenida')
+                    ->with(['usuario' => $this->usuario]);
+    }
+}
+
+Mail::to('cliente@ejemplo.com')->send(new BienvenidaMail($usuario));
+```
+
+Drivers: `smtp`, `log`, `null`
+
+---
+
+### Sistema de Colas
+
+```php
+// Definir un job
+class ProcesarReservaJob extends Job
+{
+    public function handle(): void {
+        // lógica del job
+    }
+}
+
+// Despachar
+dispatch(new ProcesarReservaJob($reserva));
+dispatch(new ProcesarReservaJob($reserva))->onQueue('reservas');
+
+// Worker
+php hexaphp queue:work
+php hexaphp queue:work --queue=reservas
+php hexaphp queue:failed
+```
+
+Drivers: `sync`, `database`, `redis`
+
+---
+
+### Storage
+
+```php
+Storage::put('vuelos/foto.jpg', $contenido);
+Storage::get('vuelos/foto.jpg');
+Storage::delete('vuelos/foto.jpg');
+Storage::url('vuelos/foto.jpg');
+Storage::exists('vuelos/foto.jpg');
+Storage::disk('s3')->put('backup.zip', $contenido);
+```
+
+Drivers: `local`, `s3`
+
+---
+
+### Caché
+
+```php
+cache()->set('vuelos_populares', $vuelos, ttl: 3600);
+cache()->get('vuelos_populares');
+cache()->remember('vuelos_mex', 600, fn() => Vuelo::query()->where('origen', 'MEX')->get());
+cache()->delete('vuelos_populares');
+```
+
+Drivers: `file`, `redis`, `array`
+
+---
+
+### Eventos
+
+```php
+// Definir
+class VueloReservado extends Event
+{
+    public function __construct(public readonly Vuelo $vuelo) {}
+}
+
+// Listener
+class EnviarConfirmacion implements ListenerInterface
+{
+    public function handle(object $event): void {
+        Mail::to($event->vuelo->email)->send(new ConfirmacionMail($event->vuelo));
+    }
+}
+
+// Disparar
+event(new VueloReservado($vuelo));
+```
+
+---
+
+### Notificaciones
+
+```php
+class ReservaConfirmada extends Notification
+{
+    public function via(): array    { return ['mail', 'database']; }
+    public function toMail(): array { return ['subject' => 'Reserva confirmada', ...]; }
+}
+
+$usuario->notify(new ReservaConfirmada($reserva));
+// o: notify($usuario, new ReservaConfirmada($reserva));
+```
+
+Canales: `mail`, `database`, `slack`
+
+---
+
+### Broadcasting (SSE)
+
+```php
+class VueloActualizado extends Event implements ShouldBroadcast
+{
+    public function broadcastOn(): string  { return 'vuelos'; }
+    public function broadcastAs(): string  { return 'actualizado'; }
+}
+
+// Cliente JavaScript
+const source = new EventSource('/broadcast/vuelos');
+source.addEventListener('actualizado', e => console.log(JSON.parse(e.data)));
+```
+
+---
+
+### Internacionalización
+
+```php
+// lang/es/vuelos.php
+return ['bienvenida' => 'Bienvenido, :nombre'];
+
+__('vuelos.bienvenida', ['nombre' => 'Raúl']);   // "Bienvenido, Raúl"
+trans_choice('vuelos.asientos', $n);               // pluralización con pipes
+```
+
+---
+
+### Templates Twig
+
+```twig
+{# Funciones disponibles en Twig #}
+{{ route('vuelos.index') }}
+{{ asset('css/app.css') }}
+{{ vite('resources/js/app.js') }}
+{{ __('vuelos.bienvenida', {nombre: 'Raúl'}) }}
+{% if auth().check() %}Hola, {{ auth().user().name }}{% endif %}
+{% if can('editar-vuelo', vuelo) %}...{% endif %}
+```
+
+```php
+// View composers — datos automáticos en vistas
+View::composer('layouts/*', function (ViewData $data) {
+    $data->set('monedas', Moneda::all());
+});
+
+// Datos compartidos globalmente
+View::share('app_name', config('app.name'));
+```
+
+---
+
+### HTTP Client
+
+```php
+$response = Http::withToken($token)
+    ->retry(3, 100)
+    ->post('https://api.aerolinea.com/reservas', ['vuelo_id' => 1]);
+
+$response->json();
+$response->status();
+$response->successful();
+```
+
+---
+
+### Scheduler
+
+```php
+// src/Core/Console/Scheduler.php
+$schedule->command('vuelos:sync')->hourly();
+$schedule->command('reportes:generar')->dailyAt('06:00');
+$schedule->call(fn() => Cache::clear())->everyFiveMinutes();
+```
+
+```bash
+php hexaphp schedule:list          # Ver tareas programadas
+php hexaphp schedule:work          # Daemon con graceful shutdown (SIGTERM)
+```
+
+---
+
+### Tinker (REPL)
+
+```bash
+php hexaphp tinker
+>>> Vuelo::query()->where('destino', 'MAD')->count()
+>>> dispatch(new ProcesarReservaJob($vuelo))
+```
+
+---
+
+### Testing
+
+```php
+class VuelosTest extends TestCase
+{
+    public function test_crear_vuelo(): void
+    {
+        $vuelo = Vuelo::factory()->create(['origen' => 'MEX', 'destino' => 'MAD']);
+
+        $response = $this->post('/api/vuelos', ['origen' => 'MEX', 'destino' => 'MAD', 'precio' => 350]);
+
+        $response->assertStatus(201)
+                 ->assertJsonPath('data.origen', 'MEX');
+    }
+
+    public function test_requiere_autenticacion(): void
+    {
+        $this->get('/api/mis-reservas')->assertStatus(401);
+    }
 }
 ```
 
-### Live Slices (Monolito Reactivo y Tiempo Real) ⚡
-HexaGen incluye soporte para **Live Slices**, un motor de componentes reactivos del lado del servidor inspirado en Phoenix LiveView y Laravel Livewire. 
+---
 
-Permite actualizar partes de la interfaz web en tiempo real sin recargar la pantalla ni escribir archivos de compilación en JavaScript, usando **HTMX** y un **estado cifrado y firmado** por seguridad.
+### Factories
 
-#### 1. Definir el componente reactivo:
-Crea un componente dentro de `src/Slices/[Slice]/Components/[Componente].php`:
 ```php
-namespace HexaGen\Slices\Vuelos\Components;
+// database/factories/VueloFactory.php
+class VueloFactory extends ModelFactory
+{
+    protected string $model = Vuelo::class;
 
-use HexaGen\Core\Live\LiveComponent;
+    public function definition(): array {
+        return [
+            'origen'  => $this->faker->lexify('???'),
+            'destino' => $this->faker->lexify('???'),
+            'precio'  => $this->faker->randomFloat(2, 50, 1500),
+            'clase'   => $this->faker->randomElement(['economy', 'business']),
+        ];
+    }
+}
 
+// Uso
+Vuelo::factory()->make();
+Vuelo::factory()->count(10)->create();
+Vuelo::factory()->state(['clase' => 'business'])->create();
+```
+
+---
+
+### OpenAPI
+
+```bash
+php hexaphp openapi:generate       # Genera openapi.json desde tus rutas
+```
+
+---
+
+### Live Slices (Reactivo sin JS)
+
+```php
 class ContadorVuelos extends LiveComponent
 {
-    // Las propiedades públicas representan el estado del componente
     public int $clicks = 0;
 
-    // Métodos que pueden ser gatillados desde la interfaz por eventos HTMX
-    public function incrementar(): void
-    {
-        $this->clicks++;
-    }
+    public function incrementar(): void { $this->clicks++; }
 
-    public function render(): string
-    {
-        return $this->renderView('@Vuelos/contador.twig');
-    }
+    public function render(): string   { return $this->renderView('@Vuelos/contador.twig'); }
 }
 ```
 
-#### 2. Escribir la plantilla Twig del componente (`contador.twig`):
-Usa atributos de HTMX para conectar el botón con el método del servidor y enviar el estado cifrado de forma segura:
 ```twig
-<div class="card">
-    <h3>Clicks recibidos: {{ clicks }}</h3>
+<div>
+    <h3>Clicks: {{ clicks }}</h3>
     <button hx-post="/live/ContadorVuelos/incrementar"
-            hx-vals='js:{"state": event.target.closest("[data-live-state]").getAttribute("data-live-state")}'>
-        Incrementar +1
+            hx-vals='js:{"state": document.querySelector("[data-live-state]").dataset.liveState}'>
+        +1
     </button>
 </div>
 ```
 
-#### 3. Renderizar el componente desde tu controlador:
+---
+
+### CLI completo (`hexaphp`)
+
+```bash
+# Generadores
+php hexaphp make:slice NombreSlice
+php hexaphp make:model NombreModel
+php hexaphp make:controller NombreController
+php hexaphp make:request NombreRequest
+php hexaphp make:mail NombreMail
+php hexaphp make:job NombreJob
+php hexaphp make:event NombreEvent
+php hexaphp make:middleware NombreMiddleware
+php hexaphp make:seeder NombreSeeder
+php hexaphp make:factory NombreFactory
+php hexaphp make:provider NombreProvider
+php hexaphp make:notification NombreNotification
+php hexaphp make:resource NombreResource
+php hexaphp make:test NombreTest
+php hexaphp make:migration crear_tabla_vuelos
+
+# Base de datos
+php hexaphp migrate
+php hexaphp migrate:rollback [--step=N]
+php hexaphp migrate:fresh
+php hexaphp migrate:status
+php hexaphp db:seed
+
+# Colas
+php hexaphp queue:work [--queue=nombre]
+php hexaphp queue:install
+php hexaphp queue:failed
+
+# Scheduler
+php hexaphp schedule:run
+php hexaphp schedule:work
+php hexaphp schedule:list
+
+# Caché & Optimización
+php hexaphp config:cache
+php hexaphp config:clear
+php hexaphp optimize
+php hexaphp optimize:clear
+
+# OpenAPI
+php hexaphp openapi:generate
+
+# Mantenimiento
+php hexaphp down
+php hexaphp up
+
+# Dev
+php hexaphp tinker
+php hexaphp server:start
+```
+
+---
+
+## Worker Mode (FrankenPHP)
+
+El kernel arranca **una sola vez** y sirve miles de requests por proceso — sin cold start:
+
 ```php
-public function index(Request $request): Response
-{
-    $contador = new ContadorVuelos();
-    
-    // view() es el helper global integrado para renderizar vistas Twig
-    return view('@Vuelos/index.twig', [
-        'liveContador' => $contador->render()
-    ]);
+// public/index.php
+$kernel = new HexaGen\Core\Kernel();
+$kernel->boot();
+
+if (function_exists('frankenphp_handle_request')) {
+    for ($i = 0; frankenphp_handle_request() && $i < 1000; ++$i) {
+        $request  = Request::createFromGlobals();
+        $response = $kernel->handle($request);
+        $response->send();
+        $kernel->terminate($request, $response); // limpia auth + request por request
+        gc_collect_cycles();
+    }
 }
 ```
-y en tu layout HTML principal (`index.twig`), asegúrate de cargar **HTMX** y renderizar el componente de forma raw:
-```twig
-<script src="https://unpkg.com/htmx.org"></script>
-...
-<div>{{ liveContador|raw }}</div>
-```
 
+Optimizaciones de worker mode:
+- UrlMatcher cacheado (se construye una vez)
+- ReflectionMethod/Class cacheado estáticamente
+- Instancias de middleware cacheadas
+- `AuthManager::reset()` + `CurrentRequest::reset()` en cada `terminate()` — sin fugas de identidad
 
+---
+
+## Seguridad
+
+- CSRF con `hash_equals` (timing-safe)
+- JWT: alg:none bloqueado, blacklist por caché, jti, nbf/exp
+- Sesiones: `session_regenerate_id` en login/logout
+- Passwords: bcrypt con rehash automático al detectar costo obsoleto
+- SQL injection: identificadores entrecomillados + whitelist de operadores
+- Headers de seguridad: CSP, HSTS, X-Frame-Options, X-Content-Type-Options
+- Stack traces solo con `APP_DEBUG=true`
+- `.env` nunca en control de versiones
+
+---
+
+## Requisitos
+
+- PHP 8.3+
+- Composer
+- SQLite (desarrollo) / MySQL / PostgreSQL (producción)
+- Redis (opcional, para caché y colas)
+- FrankenPHP (opcional, recomendado para producción)
