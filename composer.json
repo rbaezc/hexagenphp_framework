@@ -12,7 +12,7 @@
         "symfony/mailer": "^7.0",
         "twig/twig": "^3.0",
         "predis/predis": "^2.0",
-        "firebase/php-jwt": "^6.0",
+        "firebase/php-jwt": "^7.0",
         "guzzlehttp/guzzle": "^7.0"
     },
     "require-dev": {
