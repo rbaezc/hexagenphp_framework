@@ -1,17 +1,11 @@
 <?php
 namespace HexaGen\Core\Database;
 
-use PDO;
+use HexaGen\Core\Database\Schema\Schema;
 
 abstract class Migration
 {
-    /**
-     * Run the migration schema updates.
-     */
-    abstract public function up(PDO $pdo): void;
+    abstract public function up(Schema $schema): void;
 
-    /**
-     * Reverse the migration schema updates.
-     */
-    abstract public function down(PDO $pdo): void;
+    abstract public function down(Schema $schema): void;
 }

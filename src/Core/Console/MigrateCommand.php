@@ -1,11 +1,12 @@
 <?php
 namespace HexaGen\Core\Console;
 
+use HexaGen\Core\Database\DatabaseConnection;
+use HexaGen\Core\Database\Schema\Schema;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
-use HexaGen\Core\Database\DatabaseConnection;
 
 class MigrateCommand extends Command
 {
@@ -17,8 +18,9 @@ class MigrateCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io  = new SymfonyStyle($input, $output);
-        $pdo = (new DatabaseConnection())->getPdo();
+        $io     = new SymfonyStyle($input, $output);
+        $pdo    = (new DatabaseConnection())->getPdo();
+        $schema = new Schema($pdo);
 
         $this->ensureMigrationsTable($pdo);
 
@@ -36,12 +38,10 @@ class MigrateCommand extends Command
 
         sort($files);
 
-        $executed = $pdo->query("SELECT migration FROM migrations")
-                        ->fetchAll(\PDO::FETCH_COLUMN);
+        $executed    = $pdo->query("SELECT migration FROM migrations")->fetchAll(\PDO::FETCH_COLUMN);
         $executedSet = array_flip($executed);
-
-        $batch    = ((int) $pdo->query("SELECT MAX(batch) FROM migrations")->fetchColumn()) + 1;
-        $runCount = 0;
+        $batch       = ((int) $pdo->query("SELECT MAX(batch) FROM migrations")->fetchColumn()) + 1;
+        $runCount    = 0;
 
         foreach ($files as $file) {
             $name = basename($file, '.php');
@@ -59,7 +59,7 @@ class MigrateCommand extends Command
 
             try {
                 $pdo->beginTransaction();
-                $migration->up($pdo);
+                $migration->up($schema);
                 $pdo->prepare("INSERT INTO migrations (migration, batch, ran_at) VALUES (?, ?, ?)")
                     ->execute([$name, $batch, date('Y-m-d H:i:s')]);
                 $pdo->commit();
@@ -94,13 +94,8 @@ class MigrateCommand extends Command
                 batch     INTEGER NOT NULL DEFAULT 1,
                 ran_at    DATETIME DEFAULT CURRENT_TIMESTAMP
             )");
-            // Add batch column if table existed without it (upgrade path)
-            try {
-                $pdo->exec("ALTER TABLE migrations ADD COLUMN batch INTEGER NOT NULL DEFAULT 1");
-            } catch (\Throwable) {}
-            try {
-                $pdo->exec("ALTER TABLE migrations ADD COLUMN ran_at DATETIME DEFAULT CURRENT_TIMESTAMP");
-            } catch (\Throwable) {}
+            try { $pdo->exec("ALTER TABLE migrations ADD COLUMN batch INTEGER NOT NULL DEFAULT 1"); } catch (\Throwable) {}
+            try { $pdo->exec("ALTER TABLE migrations ADD COLUMN ran_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (\Throwable) {}
         } else {
             $pdo->exec("CREATE TABLE IF NOT EXISTS migrations (
                 id        INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

@@ -11,63 +11,98 @@ class MakeMigrationCommand extends Command
 {
     protected function configure(): void
     {
-        $this
-            ->setName('make:migration')
-            ->setDescription('Crea un nuevo archivo de migración.')
-            ->addArgument('name', InputArgument::REQUIRED, 'El nombre de la migración (ej. create_users_table)');
+        $this->setName('make:migration')
+             ->setDescription('Create a new migration file.')
+             ->addArgument('name', InputArgument::REQUIRED, 'Migration name (e.g. create_users_table)');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io = new SymfonyStyle($input, $output);
+        $io   = new SymfonyStyle($input, $output);
         $name = strtolower($input->getArgument('name'));
-        
-        $projectDir = dirname(dirname(dirname(__DIR__)));
-        $migrationsDir = $projectDir . '/database/migrations';
 
+        $migrationsDir = dirname(__DIR__, 3) . '/database/migrations';
         if (!is_dir($migrationsDir)) {
             mkdir($migrationsDir, 0755, true);
         }
 
         $timestamp = date('Y_m_d_His');
-        $fileName = $timestamp . '_' . $name . '.php';
-        $filePath = $migrationsDir . '/' . $fileName;
+        $fileName  = "{$timestamp}_{$name}.php";
+        $filePath  = "{$migrationsDir}/{$fileName}";
 
-        // Guess table name from migration name (e.g. create_users_table -> users)
-        $tableName = 'table_name';
-        if (str_starts_with($name, 'create_') && str_ends_with($name, '_table')) {
-            $tableName = substr($name, 7, -6);
-        }
+        $tableName = $this->guessTableName($name);
+        $isCreate  = str_starts_with($name, 'create_');
 
-        $template = <<<PHP
-<?php
-use HexaGen\Core\Database\Migration;
+        $stub = $isCreate
+            ? $this->createStub($tableName)
+            : $this->alterStub($tableName);
 
-return new class extends Migration {
-    /**
-     * Run the migrations.
-     */
-    public function up(PDO \$pdo): void
-    {
-        \$pdo->exec("CREATE TABLE `{$tableName}` (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        )");
+        file_put_contents($filePath, $stub);
+
+        $io->success("Migration created: database/migrations/{$fileName}");
+        return Command::SUCCESS;
     }
 
-    /**
-     * Reverse the migrations.
-     */
-    public function down(PDO \$pdo): void
+    private function guessTableName(string $name): string
     {
-        \$pdo->exec("DROP TABLE `{$tableName}`");
+        if (str_starts_with($name, 'create_') && str_ends_with($name, '_table')) {
+            return substr($name, 7, -6);
+        }
+        if (preg_match('/(?:add|remove|drop)_\w+_(?:to|from|in)_(\w+)/', $name, $m)) {
+            return $m[1];
+        }
+        return 'table_name';
+    }
+
+    private function createStub(string $table): string
+    {
+        return <<<PHP
+<?php
+use HexaGen\Core\Database\Migration;
+use HexaGen\Core\Database\Schema\Schema;
+
+return new class extends Migration
+{
+    public function up(Schema \$schema): void
+    {
+        \$schema->create('{$table}', function (\$table) {
+            \$table->id();
+            \$table->string('name');
+            \$table->timestamps();
+        });
+    }
+
+    public function down(Schema \$schema): void
+    {
+        \$schema->dropIfExists('{$table}');
     }
 };
 PHP;
+    }
 
-        file_put_contents($filePath, $template);
-        $io->success(sprintf('Migración creada exitosamente: %s', 'database/migrations/' . $fileName));
-        return Command::SUCCESS;
+    private function alterStub(string $table): string
+    {
+        return <<<PHP
+<?php
+use HexaGen\Core\Database\Migration;
+use HexaGen\Core\Database\Schema\Schema;
+
+return new class extends Migration
+{
+    public function up(Schema \$schema): void
+    {
+        \$schema->table('{$table}', function (\$table) {
+            \$table->string('column_name')->nullable();
+        });
+    }
+
+    public function down(Schema \$schema): void
+    {
+        \$schema->table('{$table}', function (\$table) {
+            \$table->dropColumn('column_name');
+        });
+    }
+};
+PHP;
     }
 }

@@ -2,6 +2,7 @@
 namespace HexaGen\Core\Console;
 
 use HexaGen\Core\Database\DatabaseConnection;
+use HexaGen\Core\Database\Schema\Schema;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -19,9 +20,10 @@ class MigrateRollbackCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io    = new SymfonyStyle($input, $output);
-        $pdo   = (new DatabaseConnection())->getPdo();
-        $steps = max(1, (int) $input->getOption('step'));
+        $io     = new SymfonyStyle($input, $output);
+        $pdo    = (new DatabaseConnection())->getPdo();
+        $schema = new Schema($pdo);
+        $steps  = max(1, (int) $input->getOption('step'));
 
         // Detect if migrations table exists (driver-agnostic)
         try {
@@ -67,7 +69,7 @@ class MigrateRollbackCommand extends Command
 
             try {
                 $pdo->beginTransaction();
-                $migration->down($pdo);
+                $migration->down($schema);
                 $pdo->prepare("DELETE FROM migrations WHERE migration = ?")->execute([$name]);
                 $pdo->commit();
                 $io->text("  Rolled back: <info>$name</info>");
