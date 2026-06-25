@@ -27,4 +27,13 @@ abstract class Relation
      * Match the queried relation results back to their parent models.
      */
     abstract public function match(array $models, array $results, string $relationName): array;
+
+    /**
+     * Apply an eager-load constraint closure to this relation's query.
+     * Subclasses that support constrained eager loading should override this.
+     */
+    public function applyConstraint(\Closure $callback): void
+    {
+        // Default no-op; concrete relations override if they carry a QueryBuilder.
+    }
 }

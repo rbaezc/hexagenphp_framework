@@ -1,3 +1,8 @@
+# Environment secrets (never commit real credentials)
+.env
+.env.local
+.env.*.local
+
 # Composer dependencies
 /vendor/
 

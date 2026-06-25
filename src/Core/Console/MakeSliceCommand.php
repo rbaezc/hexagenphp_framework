@@ -146,7 +146,7 @@ PHP;
         try {
             $dbConn = new \HexaGen\Core\Database\DatabaseConnection();
             $pdo = $dbConn->getPdo();
-            
+
             // Resolve same pluralized table name
             $tableName = strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $modelName));
             if (preg_match('/[bcdfghjklmnpqrstvwxz]$/i', $tableName)) {
@@ -155,15 +155,22 @@ PHP;
                 $tableName .= 's';
             }
 
-            // Check if sqlite table exists
-            $stmt = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='$tableName'");
-            if (!$stmt->fetch()) {
-                $pdo->exec("CREATE TABLE $tableName (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                )");
-                $io->info("Base de datos SQLite: Creada la tabla '$tableName' para el Slice.");
+            // Validate identifier before using in DDL (only alphanumeric + underscore allowed)
+            if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $tableName)) {
+                $io->warning("Nombre de tabla inválido '$tableName'. Se omite la creación automática de tabla.");
+            } else {
+                // Use prepared statement for the SELECT check
+                $stmt = $pdo->prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=:name");
+                $stmt->execute([':name' => $tableName]);
+                if (!$stmt->fetch()) {
+                    // DDL cannot use prepared statements, but identifier is validated above
+                    $pdo->exec("CREATE TABLE `$tableName` (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        created_at TEXT NOT NULL
+                    )");
+                    $io->info("Base de datos SQLite: Creada la tabla '$tableName' para el Slice.");
+                }
             }
         } catch (\Throwable $e) {
             // Ignore database connection issues (e.g. if DB is not SQLite or credentials not set yet)

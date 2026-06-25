@@ -5,12 +5,21 @@ use HexaGen\Core\Template\TemplateEngine;
 
 abstract class LiveComponent
 {
-    private static string $appKey = 'HexaGenSecretKeySaltForLiveSlicesValidation'; // Can be loaded from env
     private string $id;
 
     public function __construct()
     {
         $this->id = 'live-' . uniqid();
+    }
+
+    private static function getAppKey(): string
+    {
+        $key = getenv('APP_KEY');
+        if (!$key) {
+            throw new \RuntimeException('APP_KEY environment variable is not set. Set it to a random 32+ character string.');
+        }
+        // Derive a fixed 32-byte key for AES-256
+        return hash('sha256', $key, true);
     }
 
     /**
@@ -25,7 +34,14 @@ abstract class LiveComponent
     }
 
     /**
-     * Hydrate component properties with client state.
+     * Properties that cannot be set via HTTP request input (mass assignment protection).
+     * Override in subclasses to protect sensitive fields.
+     * Example: protected array $guarded = ['isAdmin', 'role'];
+     */
+    protected array $guarded = [];
+
+    /**
+     * Hydrate component from trusted server-generated state (decrypted payload).
      */
     public function hydrate(array $state): void
     {
@@ -37,34 +53,53 @@ abstract class LiveComponent
     }
 
     /**
-     * Encrypt and sign (HMAC-SHA256) the current component state.
+     * Hydrate component from untrusted HTTP request input.
+     * Respects the $guarded array — guarded properties cannot be overwritten.
      */
-    public function getSignedState(): string
+    public function hydrateFromInput(array $input): void
     {
-        $serialized = json_encode($this->getState());
-        $signature = hash_hmac('sha256', $serialized, self::$appKey);
-        return base64_encode($serialized) . '.' . $signature;
+        foreach ($input as $key => $value) {
+            if (property_exists($this, $key) && !in_array($key, $this->guarded, true)) {
+                $this->$key = $value;
+            }
+        }
     }
 
     /**
-     * Verify signature and decrypt state.
+     * Encrypt the current component state with AES-256-GCM.
+     */
+    public function getSignedState(): string
+    {
+        $key = self::getAppKey();
+        $plaintext = json_encode($this->getState());
+        $iv = random_bytes(12);
+        $tag = '';
+        $ciphertext = openssl_encrypt($plaintext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
+        return base64_encode($iv . $tag . $ciphertext);
+    }
+
+    /**
+     * Decrypt and verify the AES-256-GCM encrypted state token.
      */
     public static function decryptState(string $payload): ?array
     {
-        $parts = explode('.', $payload);
-        if (count($parts) !== 2) {
+        $key = self::getAppKey();
+        $decoded = base64_decode($payload, true);
+        // Minimum: 12 bytes IV + 16 bytes GCM tag
+        if ($decoded === false || strlen($decoded) < 28) {
             return null;
         }
 
-        [$encodedState, $signature] = $parts;
-        $serialized = base64_decode($encodedState);
-        
-        $expectedSignature = hash_hmac('sha256', $serialized, self::$appKey);
-        if (!hash_equals($expectedSignature, $signature)) {
-            return null; // Tampering detected
+        $iv         = substr($decoded, 0, 12);
+        $tag        = substr($decoded, 12, 16);
+        $ciphertext = substr($decoded, 28);
+
+        $plaintext = openssl_decrypt($ciphertext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
+        if ($plaintext === false) {
+            return null; // Decryption or authentication failed
         }
 
-        return json_decode($serialized, true);
+        return json_decode($plaintext, true);
     }
 
     /**

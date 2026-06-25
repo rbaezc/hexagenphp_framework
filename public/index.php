@@ -5,6 +5,19 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 // 1. Inicializas el núcleo de tu Framework UNA SOLA VEZ
 $kernel = new HexaGen\Core\Kernel();
+
+// ── Providers ────────────────────────────────────────────────────────────────
+// Los providers en composer.json (extra.hexagen.providers) se cargan automáticamente.
+// Para agregar los tuyos:
+// $kernel->addProvider(\App\Providers\AuthServiceProvider::class);
+
+// ── Middlewares globales opcionales ──────────────────────────────────────────
+// CSRF: actívalo para apps con formularios HTML. Configura excepciones en config/csrf.php.
+// $kernel->addMiddleware(\HexaGen\Core\Middleware\CsrfMiddleware::class);
+//
+// Para APIs puras con JWT/API keys no es necesario el CSRF.
+// Agrega tus rutas de API a 'except' en config/csrf.php en lugar de omitir el middleware.
+
 $kernel->boot();
 
 // 2. Definir la lógica de procesamiento de la petición

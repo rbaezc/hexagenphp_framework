@@ -8,6 +8,30 @@ class DatabaseConnection
     private ?PDO $pdo = null;
 
     /**
+     * Execute a callable inside a database transaction.
+     * Automatically commits on success or rolls back on exception.
+     *
+     * @throws \Throwable Re-throws any exception after rollback.
+     */
+    public function transaction(callable $callback): mixed
+    {
+        $pdo = $this->getPdo();
+        $pdo->beginTransaction();
+        try {
+            $result = $callback($this);
+            $pdo->commit();
+            return $result;
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    public function beginTransaction(): void  { $this->getPdo()->beginTransaction(); }
+    public function commit(): void            { $this->getPdo()->commit(); }
+    public function rollBack(): void          { $this->getPdo()->rollBack(); }
+
+    /**
      * Get or create a PDO database connection instance.
      */
     public function getPdo(): PDO

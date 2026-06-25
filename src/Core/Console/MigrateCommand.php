@@ -11,87 +11,103 @@ class MigrateCommand extends Command
 {
     protected function configure(): void
     {
-        $this
-            ->setName('migrate')
-            ->setDescription('Ejecuta todas las migraciones pendientes.');
+        $this->setName('migrate')
+             ->setDescription('Run all pending database migrations.');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io = new SymfonyStyle($input, $output);
-        $db = new DatabaseConnection();
-        $pdo = $db->getPdo();
+        $io  = new SymfonyStyle($input, $output);
+        $pdo = (new DatabaseConnection())->getPdo();
 
-        // 1. Create migrations table if not exists (SQLite auto-increment format)
-        $pdo->exec("CREATE TABLE IF NOT EXISTS migrations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            migration TEXT NOT NULL,
-            run_at TEXT NOT NULL
-        )");
+        $this->ensureMigrationsTable($pdo);
 
-        $projectDir = dirname(dirname(dirname(__DIR__)));
-        $migrationsDir = $projectDir . '/database/migrations';
-
+        $migrationsDir = dirname(__DIR__, 3) . '/database/migrations';
         if (!is_dir($migrationsDir)) {
-            $io->info('No se encontró la carpeta de migraciones. Nada que migrar.');
+            $io->info('No migrations directory found. Nothing to migrate.');
             return Command::SUCCESS;
         }
 
-        $files = glob($migrationsDir . '/*.php');
+        $files = glob($migrationsDir . '/*.php') ?: [];
         if (empty($files)) {
-            $io->info('No hay archivos de migración pendientes.');
+            $io->info('No migration files found.');
             return Command::SUCCESS;
         }
 
-        // Sort files to guarantee execution order based on timestamp prefixes
         sort($files);
 
-        // Get already executed migrations from database log
-        $stmt = $pdo->query("SELECT migration FROM migrations");
-        $executed = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+        $executed = $pdo->query("SELECT migration FROM migrations")
+                        ->fetchAll(\PDO::FETCH_COLUMN);
+        $executedSet = array_flip($executed);
 
+        $batch    = ((int) $pdo->query("SELECT MAX(batch) FROM migrations")->fetchColumn()) + 1;
         $runCount = 0;
+
         foreach ($files as $file) {
-            $migrationName = basename($file, '.php');
-            if (in_array($migrationName, $executed)) {
+            $name = basename($file, '.php');
+            if (isset($executedSet[$name])) {
                 continue;
             }
 
-            $io->text("Migrando: <comment>$migrationName</comment>...");
-            
-            // Require the anonymous class and check type
+            $io->text("Migrating: <comment>$name</comment>");
+
             $migration = require $file;
-            if ($migration instanceof \HexaGen\Core\Database\Migration) {
-                try {
-                    $pdo->beginTransaction();
-                    $migration->up($pdo);
-                    
-                    // Log migration run
-                    $stmtLog = $pdo->prepare("INSERT INTO migrations (migration, run_at) VALUES (:mig, :run_at)");
-                    $stmtLog->execute([
-                        ':mig' => $migrationName,
-                        ':run_at' => date('Y-m-d H:i:s')
-                    ]);
-                    
-                    $pdo->commit();
-                    $io->text("Migrado:  <info>$migrationName</info>");
-                    $runCount++;
-                } catch (\Throwable $e) {
-                    if ($pdo->inTransaction()) {
-                        $pdo->rollBack();
-                    }
-                    $io->error("Fallo al migrar: $migrationName. Detalle: " . $e->getMessage());
-                    return Command::FAILURE;
+            if (!$migration instanceof \HexaGen\Core\Database\Migration) {
+                $io->warning("Skipped $name — does not return a Migration instance.");
+                continue;
+            }
+
+            try {
+                $pdo->beginTransaction();
+                $migration->up($pdo);
+                $pdo->prepare("INSERT INTO migrations (migration, batch, ran_at) VALUES (?, ?, ?)")
+                    ->execute([$name, $batch, date('Y-m-d H:i:s')]);
+                $pdo->commit();
+                $io->text("  Migrated:  <info>$name</info>");
+                $runCount++;
+            } catch (\Throwable $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
                 }
+                $io->error("Failed: $name — " . $e->getMessage());
+                return Command::FAILURE;
             }
         }
 
         if ($runCount === 0) {
-            $io->success('Base de datos al día. Nada que migrar.');
+            $io->success('Database is up to date. Nothing to migrate.');
         } else {
-            $io->success(sprintf('Se ejecutaron %d migración(es) con éxito.', $runCount));
+            $io->success("$runCount migration(s) ran successfully (batch $batch).");
         }
 
         return Command::SUCCESS;
+    }
+
+    private function ensureMigrationsTable(\PDO $pdo): void
+    {
+        $driver = $pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
+
+        if ($driver === 'sqlite') {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS migrations (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                migration VARCHAR(255) NOT NULL,
+                batch     INTEGER NOT NULL DEFAULT 1,
+                ran_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+            )");
+            // Add batch column if table existed without it (upgrade path)
+            try {
+                $pdo->exec("ALTER TABLE migrations ADD COLUMN batch INTEGER NOT NULL DEFAULT 1");
+            } catch (\Throwable) {}
+            try {
+                $pdo->exec("ALTER TABLE migrations ADD COLUMN ran_at DATETIME DEFAULT CURRENT_TIMESTAMP");
+            } catch (\Throwable) {}
+        } else {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS migrations (
+                id        INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                migration VARCHAR(255) NOT NULL,
+                batch     INT NOT NULL DEFAULT 1,
+                ran_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+            )");
+        }
     }
 }

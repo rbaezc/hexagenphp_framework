@@ -8,18 +8,101 @@ use HexaGen\Core\Console\MakeSliceCommand;
 use HexaGen\Core\Console\StartServerCommand;
 use HexaGen\Core\Console\MakeMigrationCommand;
 use HexaGen\Core\Console\MigrateCommand;
+use HexaGen\Core\Console\MigrateRollbackCommand;
+use HexaGen\Core\Console\MigrateFreshCommand;
+use HexaGen\Core\Console\MigrateStatusCommand;
+use HexaGen\Core\Console\QueueWorkCommand;
+use HexaGen\Core\Console\QueueInstallCommand;
+use HexaGen\Core\Console\QueueFailedCommand;
+use HexaGen\Core\Console\MakeProviderCommand;
+use HexaGen\Core\Console\MakeMiddlewareCommand;
+use HexaGen\Core\Console\MakeJobCommand;
+use HexaGen\Core\Console\MakeEventCommand;
+use HexaGen\Core\Console\MakeResourceCommand;
+use HexaGen\Core\Console\MakeTestCommand;
+use HexaGen\Core\Console\ScheduleRunCommand;
+use HexaGen\Core\Console\ScheduleListCommand;
+use HexaGen\Core\Console\ScheduleWorkCommand;
+use HexaGen\Core\Console\MakeModelCommand;
+use HexaGen\Core\Console\MakeControllerCommand;
+use HexaGen\Core\Console\MakeRequestCommand;
+use HexaGen\Core\Console\MakeMailCommand;
+use HexaGen\Core\Console\MakeNotificationCommand;
+use HexaGen\Core\Console\MakeSeederCommand;
+use HexaGen\Core\Console\MakeFactoryCommand;
+use HexaGen\Core\Console\DbSeedCommand;
+use HexaGen\Core\Console\ConfigCacheCommand;
+use HexaGen\Core\Console\ConfigClearCommand;
+use HexaGen\Core\Console\OptimizeCommand;
+use HexaGen\Core\Console\OptimizeClearCommand;
+use HexaGen\Core\Console\TinkerCommand;
+use HexaGen\Core\Console\DownCommand;
+use HexaGen\Core\Console\UpCommand;
+use HexaGen\Core\Console\OpenApiGenerateCommand;
 use HexaGen\Core\Kernel;
 
 // Boot application kernel to initialize container & configuration
 $kernel = new Kernel();
 $kernel->boot();
 
-$application = new Application('HexaGen CLI', '1.0.0');
+$application = new Application('HexaGen CLI', '1.1.0');
 
-// Register commands
+// ── Scaffolding ────────────────────────────────────────────────────────────
 $application->add(new MakeSliceCommand());
+$application->add(new MakeModelCommand());
+$application->add(new MakeControllerCommand());
+$application->add(new MakeRequestCommand());
+$application->add(new MakeMailCommand());
+$application->add(new MakeNotificationCommand());
+$application->add(new MakeSeederCommand());
+$application->add(new MakeFactoryCommand());
+$application->add(new MakeProviderCommand());
+$application->add(new MakeMiddlewareCommand());
+$application->add(new MakeJobCommand());
+$application->add(new MakeEventCommand());
+$application->add(new MakeResourceCommand());
+$application->add(new MakeTestCommand());
+
+// ── Server ────────────────────────────────────────────────────────────────
 $application->add(new StartServerCommand());
+
+// ── Database ──────────────────────────────────────────────────────────────
 $application->add(new MakeMigrationCommand());
 $application->add(new MigrateCommand());
+$application->add(new MigrateRollbackCommand());
+$application->add(new MigrateFreshCommand());
+$application->add(new MigrateStatusCommand());
+$application->add(new DbSeedCommand());
+
+// ── Queue ─────────────────────────────────────────────────────────────────
+$application->add(new QueueWorkCommand());
+$application->add(new QueueInstallCommand());
+$application->add(new QueueFailedCommand());
+
+// ── Scheduler ─────────────────────────────────────────────────────────────
+$application->add(new ScheduleRunCommand());
+$application->add(new ScheduleListCommand());
+$application->add(new ScheduleWorkCommand());
+
+// ── Config / Cache / Optimize ─────────────────────────────────────────────
+$application->add(new ConfigCacheCommand());
+$application->add(new ConfigClearCommand());
+$application->add(new OptimizeCommand());
+$application->add(new OptimizeClearCommand());
+
+// ── Maintenance ───────────────────────────────────────────────────────────
+$application->add(new DownCommand());
+$application->add(new UpCommand());
+
+// ── Dev tools ─────────────────────────────────────────────────────────────
+$application->add(new TinkerCommand());
+
+// ── API Docs ──────────────────────────────────────────────────────────────
+$application->add(new OpenApiGenerateCommand());
+
+// Commands contributed by registered ServiceProviders (packages + app providers)
+foreach ($kernel->getProviderCommands() as $command) {
+    $application->add($command);
+}
 
 $application->run();
