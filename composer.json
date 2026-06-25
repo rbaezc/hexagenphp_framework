@@ -1,0 +1,26 @@
+{
+    "name": "hexagen/framework",
+    "description": "HexaGen PHP Framework - A lightweight, vertical slice framework optimized for FrankenPHP",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.3",
+        "symfony/console": "^7.0",
+        "symfony/dependency-injection": "^7.0",
+        "symfony/http-foundation": "^7.0",
+        "symfony/routing": "^7.0",
+        "twig/twig": "^3.0"
+    },
+    "autoload": {
+        "files": [
+            "src/Core/Helpers.php"
+        ],
+        "psr-4": {
+            "HexaGen\\": "src/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {}
+    }
+}

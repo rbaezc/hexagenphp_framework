@@ -1,0 +1,34 @@
+# Composer dependencies
+/vendor/
+
+# Local SQLite databases
+/database.sqlite
+/*.sqlite
+
+# Local PHP & FrankenPHP portable binaries and files (Windows package)
+/frankenphp.exe
+/php.exe
+/php-win.exe
+/php-cgi.exe
+/phpdbg.exe
+/composer.phar
+/*.dll
+/ext/
+/dev/
+/lib/
+/extras/
+/pharcommand.phar
+/phar.phar.bat
+/php8embed.lib
+/deplister.exe
+/php.ini
+/php.ini-development
+/php.ini-production
+/license.txt
+/news.txt
+/readme-redist-bins.txt
+/snapshot.txt
+
+# OS generated files
+.DS_Store
+Thumbs.db

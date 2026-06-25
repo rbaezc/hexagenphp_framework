@@ -1,0 +1,25 @@
+#!/usr/bin/env php
+<?php
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Symfony\Component\Console\Application;
+use HexaGen\Core\Console\MakeSliceCommand;
+use HexaGen\Core\Console\StartServerCommand;
+use HexaGen\Core\Console\MakeMigrationCommand;
+use HexaGen\Core\Console\MigrateCommand;
+use HexaGen\Core\Kernel;
+
+// Boot application kernel to initialize container & configuration
+$kernel = new Kernel();
+$kernel->boot();
+
+$application = new Application('HexaGen CLI', '1.0.0');
+
+// Register commands
+$application->add(new MakeSliceCommand());
+$application->add(new StartServerCommand());
+$application->add(new MakeMigrationCommand());
+$application->add(new MigrateCommand());
+
+$application->run();
