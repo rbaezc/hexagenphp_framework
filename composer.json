@@ -1,7 +1,7 @@
 {
-    "name": "hexagen/framework",
+    "name": "rbaezc/hexagenphp-framework",
     "description": "HexaGen PHP Framework - A lightweight, vertical slice framework optimized for FrankenPHP",
-    "type": "library",
+    "type": "project",
     "license": "MIT",
     "require": {
         "php": ">=8.3",
