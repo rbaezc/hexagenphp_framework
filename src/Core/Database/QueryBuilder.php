@@ -540,25 +540,108 @@ class QueryBuilder
 
     private function eagerLoadRelations(array $models): array
     {
-        foreach ($this->eagerLoads as $relationName => $constraint) {
-            $class          = $this->modelClass;
-            $parentInstance = new $class();
+        foreach ($this->buildEagerLoadTree() as $relationName => $spec) {
+            $models = $this->loadOneRelation(
+                $models,
+                $relationName,
+                $spec['constraint'],
+                $spec['nested'],
+                $this->modelClass
+            );
+        }
+        return $models;
+    }
 
-            if (!method_exists($parentInstance, $relationName)) {
-                throw new \RuntimeException("Relation [{$relationName}] not defined on model [{$class}].");
+    /** Parses dot-notation eager loads into a nested tree. */
+    private function buildEagerLoadTree(array $eagerLoads = []): array
+    {
+        $source = $eagerLoads ?: $this->eagerLoads;
+        $tree   = [];
+
+        foreach ($source as $relation => $constraint) {
+            if (str_contains((string) $relation, '.')) {
+                [$parent, $rest] = explode('.', $relation, 2);
+                $tree[$parent]['nested'][$rest] = $constraint;
+                $tree[$parent]['constraint']    ??= null;
+            } else {
+                $tree[$relation]['constraint'] = $constraint;
+                $tree[$relation]['nested']     ??= [];
+            }
+        }
+
+        return $tree;
+    }
+
+    /** Loads one relation level, then recursively loads nested relations. */
+    private function loadOneRelation(
+        array   $models,
+        string  $relationName,
+        mixed   $constraint,
+        array   $nested,
+        string  $modelClass
+    ): array {
+        $parentInstance = new $modelClass();
+
+        if (!method_exists($parentInstance, $relationName)) {
+            throw new \RuntimeException(
+                "Relation [{$relationName}] not defined on model [{$modelClass}]."
+            );
+        }
+
+        $relation = $parentInstance->$relationName();
+        if (!$relation instanceof \HexaGen\Core\Database\Relations\Relation) {
+            throw new \RuntimeException(
+                "Relation method [{$relationName}] must return a Relation instance."
+            );
+        }
+
+        if ($constraint instanceof \Closure) {
+            $relation->applyConstraint($constraint);
+        }
+
+        $results = $relation->getRelationResults($models);
+        $models  = $relation->match($models, $results, $relationName);
+
+        // Recursively load nested relations (e.g. rooms.images → images on each room)
+        if (!empty($nested) && !empty($results)) {
+            $relatedClass  = get_class($results[0]);
+            $relatedModels = [];
+
+            foreach ($models as $model) {
+                $val = $model->$relationName ?? null;
+                if ($val === null) continue;
+                if (is_array($val)) {
+                    foreach ($val as $r) $relatedModels[] = $r;
+                } else {
+                    $relatedModels[] = $val;
+                }
             }
 
-            $relation = $parentInstance->$relationName();
-            if (!$relation instanceof \HexaGen\Core\Database\Relations\Relation) {
-                throw new \RuntimeException("Relation method [{$relationName}] must return a Relation instance.");
-            }
+            if (!empty($relatedModels)) {
+                foreach ($this->buildEagerLoadTree($nested) as $nestedName => $nestedSpec) {
+                    $relatedModels = $this->loadOneRelation(
+                        $relatedModels,
+                        $nestedName,
+                        $nestedSpec['constraint'],
+                        $nestedSpec['nested'] ?? [],
+                        $relatedClass
+                    );
+                }
 
-            if ($constraint instanceof \Closure) {
-                $relation->applyConstraint($constraint);
+                // Write updated related models back to the parent models
+                $idx = 0;
+                foreach ($models as $model) {
+                    $val = $model->$relationName ?? null;
+                    if ($val === null) continue;
+                    if (is_array($val)) {
+                        $count = count($val);
+                        $model->$relationName = array_slice($relatedModels, $idx, $count);
+                        $idx += $count;
+                    } else {
+                        $model->$relationName = $relatedModels[$idx++];
+                    }
+                }
             }
-
-            $results = $relation->getRelationResults($models);
-            $models  = $relation->match($models, $results, $relationName);
         }
 
         return $models;

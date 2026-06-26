@@ -91,6 +91,12 @@ class Logger
 
     private function writeToStderr(string $entry): void
     {
-        fwrite(STDERR, $entry);
+        $stream = defined('STDERR') ? \STDERR : @fopen('php://stderr', 'w');
+        if ($stream) {
+            fwrite($stream, $entry);
+            if (!defined('STDERR')) {
+                @fclose($stream);
+            }
+        }
     }
 }

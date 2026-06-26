@@ -18,7 +18,7 @@ class Handler implements ExceptionHandlerInterface
             }
         }
 
-        Logger::channel('default')->error($e->getMessage(), [
+        (new Logger('default'))->error($e->getMessage(), [
             'exception' => get_class($e),
             'file'      => $e->getFile(),
             'line'      => $e->getLine(),
