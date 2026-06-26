@@ -5,6 +5,11 @@ export default defineConfig({
   description: 'High-performance PHP 8.3+ framework optimized for FrankenPHP',
   lang: 'en-US',
 
+  ignoreDeadLinks: [
+    /^http:\/\/localhost/,
+    /^http:\/\/127\.0\.0\.1/,
+  ],
+
   head: [
     ['link', { rel: 'icon', href: '/favicon.ico' }],
   ],
