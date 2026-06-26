@@ -4,6 +4,7 @@ export default defineConfig({
   title: 'HexaGen PHP',
   description: 'High-performance PHP 8.3+ framework optimized for FrankenPHP',
   lang: 'en-US',
+  base: '/hexagenphp_framework/',
 
   ignoreDeadLinks: [
     /^http:\/\/localhost/,
