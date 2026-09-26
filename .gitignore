@@ -37,3 +37,6 @@
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Caché de PHPUnit y archivos generados
+/var/
