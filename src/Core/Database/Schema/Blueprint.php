@@ -1,6 +1,8 @@
 <?php
 namespace HexaGen\Core\Database\Schema;
 
+use HexaGen\Core\Database\Grammar;
+
 class Blueprint
 {
     private string $table;
@@ -207,28 +209,27 @@ class Blueprint
     {
         $colDefs    = [];
         $statements = [];
+        $table      = Grammar::wrap($driver, $this->table);
 
         foreach ($this->columns as $col) {
             $colDefs[] = $this->columnToSql($col, $driver);
         }
 
         $body = implode(",\n    ", $colDefs);
-        $statements[] = "CREATE TABLE `{$this->table}` (\n    {$body}\n)";
+        $statements[] = "CREATE TABLE {$table} (\n    {$body}\n)";
 
         // Indexes from column definitions
         foreach ($this->columns as $col) {
             if ($col->unique) {
-                $n = "uniq_{$this->table}_{$col->name}";
-                $statements[] = "CREATE UNIQUE INDEX `{$n}` ON `{$this->table}` (`{$col->name}`)";
+                $statements = array_merge($statements, $this->indexToSql(['type' => 'unique', 'columns' => [$col->name], 'name' => null], $driver));
             } elseif ($col->index) {
-                $n = "idx_{$this->table}_{$col->name}";
-                $statements[] = "CREATE INDEX `{$n}` ON `{$this->table}` (`{$col->name}`)";
+                $statements = array_merge($statements, $this->indexToSql(['type' => 'index', 'columns' => [$col->name], 'name' => null], $driver));
             }
         }
 
         // Explicit index declarations
         foreach ($this->indexes as $idx) {
-            $statements = array_merge($statements, $this->indexToSql($idx));
+            $statements = array_merge($statements, $this->indexToSql($idx, $driver));
         }
 
         return $statements;
@@ -237,17 +238,18 @@ class Blueprint
     private function buildAlterSql(string $driver): array
     {
         $statements = [];
+        $table      = Grammar::wrap($driver, $this->table);
 
         foreach ($this->columns as $col) {
-            $statements[] = "ALTER TABLE `{$this->table}` ADD COLUMN " . $this->columnToSql($col, $driver);
+            $statements[] = "ALTER TABLE {$table} ADD COLUMN " . $this->columnToSql($col, $driver);
         }
 
         foreach ($this->drops as $col) {
-            $statements[] = "ALTER TABLE `{$this->table}` DROP COLUMN `{$col}`";
+            $statements[] = "ALTER TABLE {$table} DROP COLUMN " . Grammar::wrap($driver, $col);
         }
 
         foreach ($this->indexes as $idx) {
-            $statements = array_merge($statements, $this->indexToSql($idx));
+            $statements = array_merge($statements, $this->indexToSql($idx, $driver));
         }
 
         return $statements;
@@ -257,16 +259,13 @@ class Blueprint
     {
         // id columns get their own full definition to avoid driver quirks
         if ($col->type === 'id') {
-            return match ($driver) {
-                'pgsql'  => "`{$col->name}` BIGSERIAL PRIMARY KEY",
-                'sqlite' => "`{$col->name}` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT",
-                default  => "`{$col->name}` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY",
-            };
+            return Grammar::autoIncrementId($driver, $col->name);
         }
 
-        $sql = "`{$col->name}` " . $this->mapType($col, $driver);
+        $name = Grammar::wrap($driver, $col->name);
+        $sql  = "{$name} " . $this->mapType($col, $driver);
 
-        if ($col->unsigned && !in_array($driver, ['sqlite', 'pgsql'])) {
+        if ($col->unsigned && Grammar::usesBackticks($driver)) {
             $sql .= ' UNSIGNED';
         }
 
@@ -280,10 +279,15 @@ class Blueprint
         $sql .= $col->nullable ? ' NULL' : ' NOT NULL';
 
         if ($col->hasDefault) {
-            $sql .= ' DEFAULT ' . $this->quoteDefault($col->default);
+            $sql .= ' DEFAULT ' . $this->quoteDefault($col->default, $driver);
         }
 
-        if ($col->comment && in_array($driver, ['mysql', 'mariadb'])) {
+        // ENUM solo existe en MySQL; en los demás motores se valida con CHECK.
+        if ($col->type === 'enum' && !empty($col->allowed) && !Grammar::usesBackticks($driver)) {
+            $sql .= " CHECK ({$name} IN (" . $this->quotedList($col->allowed) . '))';
+        }
+
+        if ($col->comment && Grammar::usesBackticks($driver)) {
             $sql .= " COMMENT '" . addslashes($col->comment) . "'";
         }
 
@@ -306,34 +310,40 @@ class Blueprint
             'float'        => match ($driver) { 'pgsql' => 'REAL', default => 'FLOAT' },
             'double'       => match ($driver) { 'pgsql' => 'DOUBLE PRECISION', 'sqlite' => 'REAL', default => 'DOUBLE' },
             'date'         => 'DATE',
-            'dateTime'     => match ($driver) { 'pgsql' => 'TIMESTAMP', default => 'DATETIME' },
+            'dateTime'     => Grammar::dateTimeType($driver),
             'timestamp'    => 'TIMESTAMP',
             'json'         => match ($driver) { 'pgsql' => 'JSONB', 'sqlite' => 'TEXT', default => 'JSON' },
             'uuid'         => match ($driver) { 'pgsql' => 'UUID', default => 'CHAR(36)' },
-            'enum'         => !empty($col->allowed)
-                                ? "ENUM('" . implode("','", array_map('addslashes', $col->allowed)) . "')"
+            'enum'         => (!empty($col->allowed) && Grammar::usesBackticks($driver))
+                                ? 'ENUM(' . $this->quotedList($col->allowed) . ')'
                                 : 'VARCHAR(255)',
             default        => 'TEXT',
         };
     }
 
-    private function quoteDefault(mixed $value): string
+    private function quoteDefault(mixed $value, string $driver): string
     {
         if ($value === null)      return 'NULL';
-        if (is_bool($value))     return $value ? '1' : '0';
+        if (is_bool($value))      return $driver === 'pgsql' ? ($value ? 'TRUE' : 'FALSE') : ($value ? '1' : '0');
         if (is_int($value) || is_float($value)) return (string) $value;
-        return "'" . addslashes((string) $value) . "'";
+        return "'" . str_replace("'", "''", (string) $value) . "'";
     }
 
-    private function indexToSql(array $idx): array
+    private function quotedList(array $values): string
     {
-        $cols = '`' . implode('`, `', $idx['columns']) . '`';
+        return implode(', ', array_map(static fn ($v) => "'" . str_replace("'", "''", (string) $v) . "'", $values));
+    }
+
+    private function indexToSql(array $idx, string $driver): array
+    {
+        $cols   = Grammar::columnList($driver, $idx['columns']);
         $prefix = $idx['type'] === 'unique' ? 'uniq' : 'idx';
-        $name  = $idx['name'] ?? "{$prefix}_{$this->table}_" . implode('_', $idx['columns']);
+        $name   = Grammar::wrap($driver, $idx['name'] ?? "{$prefix}_{$this->table}_" . implode('_', $idx['columns']));
+        $table  = Grammar::wrap($driver, $this->table);
 
         return match ($idx['type']) {
-            'unique'  => ["CREATE UNIQUE INDEX `{$name}` ON `{$this->table}` ({$cols})"],
-            'index'   => ["CREATE INDEX `{$name}` ON `{$this->table}` ({$cols})"],
+            'unique'  => ["CREATE UNIQUE INDEX {$name} ON {$table} ({$cols})"],
+            'index'   => ["CREATE INDEX {$name} ON {$table} ({$cols})"],
             default   => [],
         };
     }

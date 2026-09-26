@@ -1,6 +1,8 @@
 <?php
 namespace HexaGen\Core\Database\Schema;
 
+use HexaGen\Core\Database\Grammar;
+
 class Schema
 {
     private \PDO   $pdo;
@@ -31,17 +33,17 @@ class Schema
 
     public function drop(string $table): void
     {
-        $this->pdo->exec("DROP TABLE `{$table}`");
+        $this->pdo->exec("DROP TABLE " . $this->wrap($table));
     }
 
     public function dropIfExists(string $table): void
     {
-        $this->pdo->exec("DROP TABLE IF EXISTS `{$table}`");
+        $this->pdo->exec("DROP TABLE IF EXISTS " . $this->wrap($table));
     }
 
     public function rename(string $from, string $to): void
     {
-        $this->pdo->exec("ALTER TABLE `{$from}` RENAME TO `{$to}`");
+        $this->pdo->exec("ALTER TABLE " . $this->wrap($from) . " RENAME TO " . $this->wrap($to));
     }
 
     // ── Introspection ─────────────────────────────────────────────────────────
@@ -69,7 +71,7 @@ class Schema
     {
         try {
             if ($this->driver === 'sqlite') {
-                $rows = $this->pdo->query("PRAGMA table_info(`{$table}`)")->fetchAll();
+                $rows = $this->pdo->query("PRAGMA table_info(" . $this->wrap($table) . ")")->fetchAll();
                 foreach ($rows as $row) {
                     if ($row['name'] === $column) return true;
                 }
@@ -81,7 +83,7 @@ class Schema
                     ->fetch();
             }
             return (bool) $this->pdo
-                ->query("SHOW COLUMNS FROM `{$table}` LIKE " . $this->pdo->quote($column))
+                ->query("SHOW COLUMNS FROM " . $this->wrap($table) . " LIKE " . $this->pdo->quote($column))
                 ->fetch();
         } catch (\Throwable) {
             return false;
@@ -92,7 +94,7 @@ class Schema
     {
         try {
             if ($this->driver === 'sqlite') {
-                return array_column($this->pdo->query("PRAGMA table_info(`{$table}`)")->fetchAll(), 'name');
+                return array_column($this->pdo->query("PRAGMA table_info(" . $this->wrap($table) . ")")->fetchAll(), 'name');
             }
             if ($this->driver === 'pgsql') {
                 return array_column(
@@ -100,7 +102,7 @@ class Schema
                     'column_name'
                 );
             }
-            return array_column($this->pdo->query("SHOW COLUMNS FROM `{$table}`")->fetchAll(), 'Field');
+            return array_column($this->pdo->query("SHOW COLUMNS FROM " . $this->wrap($table))->fetchAll(), 'Field');
         } catch (\Throwable) {
             return [];
         }
@@ -112,6 +114,11 @@ class Schema
     }
 
     // ── Internal ──────────────────────────────────────────────────────────────
+
+    private function wrap(string $identifier): string
+    {
+        return Grammar::wrap($this->driver, $identifier);
+    }
 
     private function execute(Blueprint $blueprint): void
     {

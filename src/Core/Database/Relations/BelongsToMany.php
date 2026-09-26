@@ -1,6 +1,8 @@
 <?php
 namespace HexaGen\Core\Database\Relations;
 
+use HexaGen\Core\Database\Grammar;
+
 use HexaGen\Core\Database\DatabaseConnection;
 use HexaGen\Core\Database\Model;
 use HexaGen\Core\Database\QueryBuilder;
@@ -42,8 +44,8 @@ class BelongsToMany extends Relation
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $stmt = $pdo->prepare("
             SELECT r.*, p.$foreignKey AS __pivot_parent_id
-            FROM `{$related::getTableName()}` r
-            INNER JOIN `{$this->pivotTable}` p ON p.$localKey = r.$relatedPk
+            FROM {$this->q($pdo, $related::getTableName())} r
+            INNER JOIN {$this->q($pdo, $this->pivotTable)} p ON p.$localKey = r.$relatedPk
             WHERE p.$foreignKey IN ($placeholders)
         ");
         $stmt->execute(array_values($ids));
@@ -67,14 +69,19 @@ class BelongsToMany extends Relation
     public function attach(int|string $parentId, int|string $relatedId): void
     {
         $pdo = (new DatabaseConnection())->getPdo();
-        $pdo->prepare("INSERT OR IGNORE INTO `{$this->pivotTable}` ({$this->foreignKey}, {$this->localKey}) VALUES (?, ?)")
+        $pdo->prepare(Grammar::insertIgnore(Grammar::driver($pdo), $this->pivotTable, [$this->foreignKey, $this->localKey]))
             ->execute([$parentId, $relatedId]);
     }
 
     public function detach(int|string $parentId, int|string $relatedId): void
     {
         $pdo = (new DatabaseConnection())->getPdo();
-        $pdo->prepare("DELETE FROM `{$this->pivotTable}` WHERE {$this->foreignKey} = ? AND {$this->localKey} = ?")
+        $pdo->prepare("DELETE FROM {$this->q($pdo, $this->pivotTable)} WHERE {$this->foreignKey} = ? AND {$this->localKey} = ?")
             ->execute([$parentId, $relatedId]);
+    }
+
+    private function q(\PDO $pdo, string $identifier): string
+    {
+        return Grammar::wrapFor($pdo, $identifier);
     }
 }

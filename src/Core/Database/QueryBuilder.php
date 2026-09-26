@@ -264,7 +264,7 @@ class QueryBuilder
         $sql .= implode(' ', $this->joins);
         $sql .= $this->buildWhereClause();
         $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($this->bindings);
+        $this->run($stmt, $this->bindings);
         return $stmt->fetchColumn();
     }
 
@@ -356,13 +356,30 @@ class QueryBuilder
         return $sql;
     }
 
+    private ?string $driver = null;
+
     private function quoteIdentifier(string $identifier): string
     {
-        if ($identifier === '*') return '*';
-        return implode('.', array_map(
-            fn($part) => '`' . str_replace('`', '', $part) . '`',
-            explode('.', $identifier)
-        ));
+        $this->driver ??= Grammar::driver($this->pdo);
+        return Grammar::wrap($this->driver, $identifier);
+    }
+
+    /**
+     * Ejecuta la sentencia ligando cada valor con su tipo: PostgreSQL rechaza
+     * false como cadena vacía en columnas BOOLEAN.
+     */
+    private function run(\PDOStatement $stmt, array $bindings): bool
+    {
+        foreach ($bindings as $key => $value) {
+            $type = match (true) {
+                is_bool($value)  => PDO::PARAM_BOOL,
+                is_int($value)   => PDO::PARAM_INT,
+                $value === null  => PDO::PARAM_NULL,
+                default          => PDO::PARAM_STR,
+            };
+            $stmt->bindValue(is_int($key) ? $key + 1 : $key, $value, $type);
+        }
+        return $stmt->execute();
     }
 
     private function tracedPrepare(string $sql): \PDOStatement
@@ -385,7 +402,7 @@ class QueryBuilder
     public function get(): array
     {
         $stmt = $this->tracedPrepare($this->buildSql());
-        $stmt->execute($this->bindings);
+        $this->run($stmt, $this->bindings);
         $results = $stmt->fetchAll();
 
         if ($this->modelClass === null) {
@@ -450,7 +467,7 @@ class QueryBuilder
         return \HexaGen\Core\Support\LazyCollection::make(
             function () use ($pdo, $sql, $bindings, $modelClass) {
                 $stmt = $pdo->prepare($sql);
-                $stmt->execute($bindings);
+                $this->run($stmt, $bindings);
                 $stmt->setFetchMode(\PDO::FETCH_ASSOC);
                 while ($row = $stmt->fetch()) {
                     yield $modelClass ? $modelClass::hydrate($row) : $row;
@@ -464,7 +481,7 @@ class QueryBuilder
         $countSql  = 'SELECT COUNT(*) FROM ' . $this->quoteIdentifier($this->table);
         $countSql .= $this->buildWhereClause();
         $countStmt = $this->pdo->prepare($countSql);
-        $countStmt->execute($this->bindings);
+        $this->run($countStmt, $this->bindings);
         $total = (int) $countStmt->fetchColumn();
 
         $items = $this->limit($perPage)->offset(($page - 1) * $perPage)->get();
@@ -484,7 +501,7 @@ class QueryBuilder
         foreach ($data as $key => $val) {
             $bindings[':' . $key] = $val;
         }
-        return $stmt->execute($bindings);
+        return $this->run($stmt, $bindings);
     }
 
     public function insertGetId(array $data): string|false
@@ -513,7 +530,7 @@ class QueryBuilder
         $sql .= $this->buildWhereClause();
 
         $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($bindings);
+        $this->run($stmt, $bindings);
         return $stmt->rowCount();
     }
 
@@ -527,7 +544,7 @@ class QueryBuilder
         $sql .= $this->buildWhereClause();
 
         $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($this->bindings);
+        $this->run($stmt, $this->bindings);
         return $stmt->rowCount();
     }
 

@@ -1,6 +1,8 @@
 <?php
 namespace HexaGen\Core\Console;
 
+use HexaGen\Core\Database\Grammar;
+
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -26,27 +28,29 @@ class MigrateFreshCommand extends Command
         if ($driver === 'sqlite') {
             // SQLite: get all tables and drop them
             $tables = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")->fetchAll(\PDO::FETCH_COLUMN);
+        } elseif ($driver === 'pgsql') {
+            $tables = $pdo->query("SELECT tablename FROM pg_tables WHERE schemaname = current_schema()")->fetchAll(\PDO::FETCH_COLUMN);
         } else {
             $dbName = $pdo->query('SELECT DATABASE()')->fetchColumn();
             $tables = $pdo->query("SELECT table_name FROM information_schema.tables WHERE table_schema = '{$dbName}'")->fetchAll(\PDO::FETCH_COLUMN);
         }
 
-        if ($driver !== 'sqlite') {
+        if (Grammar::usesBackticks($driver)) {
             $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
         }
 
         foreach ($tables as $table) {
             if ($table === 'migrations') continue;
-            $pdo->exec("DROP TABLE IF EXISTS `{$table}`");
+            $pdo->exec("DROP TABLE IF EXISTS " . Grammar::wrap($driver, $table) . ($driver === 'pgsql' ? ' CASCADE' : ''));
             $io->writeln("  <fg=red>Dropped:</> $table");
         }
 
-        if ($driver !== 'sqlite') {
+        if (Grammar::usesBackticks($driver)) {
             $pdo->exec('SET FOREIGN_KEY_CHECKS=1');
         }
 
         // Reset migrations tracking
-        $pdo->exec("DROP TABLE IF EXISTS `migrations`");
+        $pdo->exec("DROP TABLE IF EXISTS " . Grammar::wrap($driver, 'migrations'));
 
         $io->writeln('');
         $io->success('All tables dropped.');

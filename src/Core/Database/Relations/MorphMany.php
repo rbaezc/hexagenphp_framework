@@ -1,6 +1,8 @@
 <?php
 namespace HexaGen\Core\Database\Relations;
 
+use HexaGen\Core\Database\Grammar;
+
 use HexaGen\Core\Database\Model;
 
 class MorphMany extends Relation
@@ -23,7 +25,7 @@ class MorphMany extends Relation
         $parentId     = $this->parent->{$this->localKey};
 
         $pdo  = $this->parent::getPdo();
-        $sql  = "SELECT * FROM `{$relatedTable}` WHERE `{$typeColumn}` = :type AND `{$idColumn}` = :id";
+        $sql  = "SELECT * FROM " . Grammar::wrapFor($pdo, $relatedTable) . " WHERE " . Grammar::wrapFor($pdo, $typeColumn) . " = :type AND " . Grammar::wrapFor($pdo, $idColumn) . " = :id";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':type' => get_class($this->parent), ':id' => $parentId]);
         $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);

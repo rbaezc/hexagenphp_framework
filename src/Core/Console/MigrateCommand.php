@@ -85,24 +85,6 @@ class MigrateCommand extends Command
 
     private function ensureMigrationsTable(\PDO $pdo): void
     {
-        $driver = $pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
-
-        if ($driver === 'sqlite') {
-            $pdo->exec("CREATE TABLE IF NOT EXISTS migrations (
-                id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                migration VARCHAR(255) NOT NULL,
-                batch     INTEGER NOT NULL DEFAULT 1,
-                ran_at    DATETIME DEFAULT CURRENT_TIMESTAMP
-            )");
-            try { $pdo->exec("ALTER TABLE migrations ADD COLUMN batch INTEGER NOT NULL DEFAULT 1"); } catch (\Throwable) {}
-            try { $pdo->exec("ALTER TABLE migrations ADD COLUMN ran_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (\Throwable) {}
-        } else {
-            $pdo->exec("CREATE TABLE IF NOT EXISTS migrations (
-                id        INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                migration VARCHAR(255) NOT NULL,
-                batch     INT NOT NULL DEFAULT 1,
-                ran_at    DATETIME DEFAULT CURRENT_TIMESTAMP
-            )");
-        }
+        \HexaGen\Core\Database\MigrationsTable::ensure($pdo);
     }
 }

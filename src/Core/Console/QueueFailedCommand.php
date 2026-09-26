@@ -1,6 +1,8 @@
 <?php
 namespace HexaGen\Core\Console;
 
+use HexaGen\Core\Database\Grammar;
+
 use HexaGen\Core\Config;
 use HexaGen\Core\Database\DatabaseConnection;
 use Symfony\Component\Console\Command\Command;
@@ -39,7 +41,7 @@ class QueueFailedCommand extends Command
 
     private function list(\PDO $pdo, string $table, SymfonyStyle $io): void
     {
-        $rows = $pdo->query("SELECT id, queue, exception, failed_at FROM `$table` ORDER BY id DESC LIMIT 50")->fetchAll();
+        $rows = $pdo->query("SELECT id, queue, exception, failed_at FROM " . Grammar::wrapFor($pdo, $table) . " ORDER BY id DESC LIMIT 50")->fetchAll();
         if (!$rows) {
             $io->success('No hay jobs fallidos.');
             return;
@@ -49,18 +51,18 @@ class QueueFailedCommand extends Command
 
     private function retry(int $id, \PDO $pdo, string $table, SymfonyStyle $io): void
     {
-        $row = $pdo->prepare("SELECT * FROM `$table` WHERE id = :id")->execute([':id' => $id]);
+        $row = $pdo->prepare("SELECT * FROM " . Grammar::wrapFor($pdo, $table) . " WHERE id = :id")->execute([':id' => $id]);
         if (!$row) {
             $io->error("Job #$id no encontrado.");
             return;
         }
-        $pdo->prepare("DELETE FROM `$table` WHERE id = :id")->execute([':id' => $id]);
+        $pdo->prepare("DELETE FROM " . Grammar::wrapFor($pdo, $table) . " WHERE id = :id")->execute([':id' => $id]);
         $io->success("Job #$id movido de vuelta a la cola para reintento.");
     }
 
     private function flush(\PDO $pdo, string $table, SymfonyStyle $io): void
     {
-        $pdo->exec("DELETE FROM `$table`");
+        $pdo->exec("DELETE FROM " . Grammar::wrapFor($pdo, $table) . "");
         $io->success('Todos los jobs fallidos eliminados.');
     }
 }

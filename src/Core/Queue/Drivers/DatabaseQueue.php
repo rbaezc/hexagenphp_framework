@@ -1,6 +1,8 @@
 <?php
 namespace HexaGen\Core\Queue\Drivers;
 
+use HexaGen\Core\Database\Grammar;
+
 use HexaGen\Core\Config;
 use HexaGen\Core\Database\DatabaseConnection;
 use HexaGen\Core\Log\Logger;
@@ -25,7 +27,7 @@ class DatabaseQueue
     public function push(Job $job): void
     {
         $this->pdo->prepare("
-            INSERT INTO `{$this->table}` (queue, payload, attempts, available_at, created_at)
+            INSERT INTO {$this->wrapped()} (queue, payload, attempts, available_at, created_at)
             VALUES (:queue, :payload, 0, :available_at, :created_at)
         ")->execute([
             ':queue'        => $job->getQueue(),
@@ -41,7 +43,7 @@ class DatabaseQueue
         $retryAfter = Config::get('queue.drivers.database.retry_after', 90);
 
         $stmt = $this->pdo->prepare("
-            SELECT * FROM `{$this->table}`
+            SELECT * FROM {$this->wrapped()}
             WHERE queue = :queue
               AND reserved_at IS NULL
               AND available_at <= :now
@@ -56,7 +58,7 @@ class DatabaseQueue
         }
 
         $this->pdo->prepare("
-            UPDATE `{$this->table}`
+            UPDATE {$this->wrapped()}
             SET reserved_at = :reserved_at, attempts = attempts + 1
             WHERE id = :id
         ")->execute([':reserved_at' => time(), ':id' => $row['id']]);
@@ -66,14 +68,14 @@ class DatabaseQueue
 
     public function delete(int $id): void
     {
-        $this->pdo->prepare("DELETE FROM `{$this->table}` WHERE id = :id")
+        $this->pdo->prepare("DELETE FROM {$this->wrapped()} WHERE id = :id")
             ->execute([':id' => $id]);
     }
 
     public function release(int $id, int $delay = 0): void
     {
         $this->pdo->prepare("
-            UPDATE `{$this->table}`
+            UPDATE {$this->wrapped()}
             SET reserved_at = NULL, available_at = :available_at
             WHERE id = :id
         ")->execute([':available_at' => time() + $delay, ':id' => $id]);
@@ -81,12 +83,12 @@ class DatabaseQueue
 
     public function fail(int $id, string $error): void
     {
-        $row = $this->pdo->prepare("SELECT * FROM `{$this->table}` WHERE id = :id")
+        $row = $this->pdo->prepare("SELECT * FROM {$this->wrapped()} WHERE id = :id")
             ->execute([':id' => $id]);
 
         $failedTable = Config::get('queue.failed.table', 'failed_jobs');
         $this->pdo->prepare("
-            INSERT INTO `{$failedTable}` (queue, payload, exception, failed_at)
+            INSERT INTO {$this->wrapped($failedTable)} (queue, payload, exception, failed_at)
             VALUES (:queue, :payload, :exception, :failed_at)
         ")->execute([
             ':queue'     => 'unknown',
@@ -100,27 +102,36 @@ class DatabaseQueue
 
     public function createTable(): void
     {
+        $driver = Grammar::driver($this->pdo);
+        $id     = Grammar::autoIncrementId($driver);
+        $int    = $driver === 'sqlite' ? 'INTEGER' : 'BIGINT';
+
         $this->pdo->exec("
-            CREATE TABLE IF NOT EXISTS `{$this->table}` (
-                id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                queue        TEXT    NOT NULL DEFAULT 'default',
+            CREATE TABLE IF NOT EXISTS {$this->wrapped()} (
+                {$id},
+                queue        VARCHAR(255) NOT NULL DEFAULT 'default',
                 payload      TEXT    NOT NULL,
                 attempts     INTEGER NOT NULL DEFAULT 0,
-                reserved_at  INTEGER NULL,
-                available_at INTEGER NOT NULL,
-                created_at   INTEGER NOT NULL
+                reserved_at  {$int} NULL,
+                available_at {$int} NOT NULL,
+                created_at   {$int} NOT NULL
             )
         ");
 
         $failedTable = Config::get('queue.failed.table', 'failed_jobs');
         $this->pdo->exec("
-            CREATE TABLE IF NOT EXISTS `{$failedTable}` (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                queue      TEXT NOT NULL,
+            CREATE TABLE IF NOT EXISTS {$this->wrapped($failedTable)} (
+                {$id},
+                queue      VARCHAR(255) NOT NULL,
                 payload    TEXT NOT NULL,
                 exception  TEXT NOT NULL,
-                failed_at  TEXT NOT NULL
+                failed_at  VARCHAR(19) NOT NULL
             )
         ");
+    }
+
+    private function wrapped(?string $table = null): string
+    {
+        return Grammar::wrapFor($this->pdo, $table ?? $this->table);
     }
 }

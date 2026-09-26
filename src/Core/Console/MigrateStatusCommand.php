@@ -19,12 +19,7 @@ class MigrateStatusCommand extends Command
         $pdo = (new \HexaGen\Core\Database\DatabaseConnection())->getPdo();
 
         // Ensure migrations table exists
-        $pdo->exec("CREATE TABLE IF NOT EXISTS migrations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            migration VARCHAR(255) NOT NULL,
-            batch INTEGER NOT NULL DEFAULT 1,
-            ran_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )");
+        \HexaGen\Core\Database\MigrationsTable::ensure($pdo);
 
         $ran = $pdo->query("SELECT migration FROM migrations ORDER BY id ASC")
                    ->fetchAll(\PDO::FETCH_COLUMN);

@@ -108,7 +108,7 @@ class DatabaseConnection
                 // PostgreSQL: check then create (IF NOT EXISTS requires pg 9.3+)
                 $exists = $bootstrap->query("SELECT 1 FROM pg_database WHERE datname=" . $bootstrap->quote($database))->fetch();
                 if (!$exists) {
-                    $bootstrap->exec("CREATE DATABASE " . $bootstrap->quote($database));
+                    $bootstrap->exec("CREATE DATABASE " . Grammar::wrap('pgsql', $database));
                 }
             } else {
                 $bootstrap->exec("CREATE DATABASE IF NOT EXISTS `{$database}` CHARACTER SET {$charset}");
