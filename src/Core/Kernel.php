@@ -158,6 +158,8 @@ class Kernel
         }
 
         // Validate required environment variables before doing anything else
+        // Carga .env (sin sobrescribir variables del sistema) antes de validar.
+        \HexaGen\Core\Bootstrap\EnvLoader::load(dirname(__DIR__, 2) . '/.env');
         \HexaGen\Core\Bootstrap\EnvironmentValidator::fromConfig();
 
         // Register core services
@@ -362,7 +364,7 @@ class Kernel
 
                         if ($typeClass && is_a($typeClass, Request::class, true)) {
                             $arguments[] = $request;
-                        } elseif ($name === 'request') {
+                        } elseif ($name === 'request' && $typeClass === null) {
                             $arguments[] = $request;
                         } elseif ($typeClass && is_subclass_of($typeClass, \HexaGen\Core\Http\FormRequest::class)) {
                             // Form request resolution

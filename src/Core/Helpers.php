@@ -480,3 +480,27 @@ if (!function_exists('pipeline')) {
         return (new \HexaGen\Core\Pipeline\Pipeline())->send($payload);
     }
 }
+
+if (!function_exists('env')) {
+    /**
+     * Lee una variable de entorno. Convierte "true", "false", "null" y "(empty)".
+     */
+    function env(string $key, mixed $default = null): mixed
+    {
+        $value = getenv($key);
+        if ($value === false) {
+            $value = $_ENV[$key] ?? $_SERVER[$key] ?? null;
+        }
+        if ($value === null) {
+            return $default;
+        }
+
+        return match (strtolower((string) $value)) {
+            'true', '(true)'   => true,
+            'false', '(false)' => false,
+            'null', '(null)'   => null,
+            '(empty)'          => '',
+            default            => $value,
+        };
+    }
+}

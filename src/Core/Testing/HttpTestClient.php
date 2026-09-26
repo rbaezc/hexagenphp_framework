@@ -73,7 +73,8 @@ class HttpTestClient
 
         $server = [];
         foreach ($headers as $key => $value) {
-            $server['HTTP_' . strtoupper(str_replace('-', '_', $key))] = $value;
+            $name = strtoupper(str_replace('-', '_', $key));
+            $server[in_array($name, ['CONTENT_TYPE', 'CONTENT_LENGTH'], true) ? $name : 'HTTP_' . $name] = $value;
         }
 
         $request = Request::create($uri, $method, $body, [], [], $server, $content ?: null);

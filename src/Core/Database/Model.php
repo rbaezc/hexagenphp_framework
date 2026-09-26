@@ -182,6 +182,24 @@ abstract class Model
         return $this;
     }
 
+    /** @var array<class-string, string[]> */
+    private static array $persistableCache = [];
+
+    /**
+     * Columnas del modelo: propiedades públicas, no estáticas, declaradas en la clase
+     * (o en sus traits). Excluye configuración protegida y relaciones cargadas.
+     */
+    protected static function persistableProperties(): array
+    {
+        return self::$persistableCache[static::class] ??= array_values(array_map(
+            static fn (\ReflectionProperty $p): string => $p->getName(),
+            array_filter(
+                (new \ReflectionClass(static::class))->getProperties(\ReflectionProperty::IS_PUBLIC),
+                static fn (\ReflectionProperty $p): bool => !$p->isStatic()
+            )
+        ));
+    }
+
     public function save(): bool
     {
         $primaryKey = static::$primaryKey;
@@ -198,7 +216,9 @@ abstract class Model
         }
 
         $data = [];
-        foreach (get_object_vars($this) as $key => $val) {
+        foreach (static::persistableProperties() as $key) {
+            if (!isset($this->$key) && !property_exists($this, $key)) continue;
+            $val = $this->$key ?? null;
             if ($key === $primaryKey && $val === null) continue;
             $data[$key] = $val;
         }

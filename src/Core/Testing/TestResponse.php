@@ -1,6 +1,7 @@
 <?php
 namespace HexaGen\Core\Testing;
 
+use PHPUnit\Framework\Assert;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -14,7 +15,7 @@ class TestResponse
 
     public function assertStatus(int $status): static
     {
-        \assert(
+        Assert::assertTrue(
             $this->response->getStatusCode() === $status,
             "Expected status $status, got {$this->response->getStatusCode()}.\nBody: {$this->response->getContent()}"
         );
@@ -33,7 +34,7 @@ class TestResponse
     {
         $json = $this->json();
         foreach ($subset as $key => $value) {
-            \assert(
+            Assert::assertTrue(
                 isset($json[$key]) && $json[$key] === $value,
                 "JSON key '$key' expected '{$value}', got '" . ($json[$key] ?? 'null') . "'"
             );
@@ -45,7 +46,7 @@ class TestResponse
     {
         $json  = $this->json();
         $items = $json[$key] ?? [];
-        \assert(
+        Assert::assertTrue(
             count($items) === $count,
             "Expected $count items in '$key', got " . count($items)
         );
@@ -55,14 +56,14 @@ class TestResponse
     public function assertJsonPath(string $path, mixed $expected): static
     {
         $value = $this->jsonPath($path);
-        \assert($value === $expected, "JSON path '$path': expected '$expected', got '$value'");
+        Assert::assertTrue($value === $expected, "JSON path '$path': expected '$expected', got '$value'");
         return $this;
     }
 
     public function assertHeader(string $name, string $expected): static
     {
         $actual = $this->response->headers->get($name);
-        \assert($actual === $expected, "Header '$name': expected '$expected', got '$actual'");
+        Assert::assertTrue($actual === $expected, "Header '$name': expected '$expected', got '$actual'");
         return $this;
     }
 

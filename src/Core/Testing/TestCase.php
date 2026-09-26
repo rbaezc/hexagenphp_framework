@@ -31,7 +31,8 @@ abstract class TestCase extends \PHPUnit\Framework\TestCase
         parent::setUp();
 
         // Use in-memory SQLite so tests don't touch the real DB
-        putenv('DB_DSN=sqlite::memory:');
+        putenv('DB_DRIVER=sqlite');
+        putenv('DB_DATABASE=:memory:');
         putenv('CACHE_DRIVER=array');
 
         $this->kernel = new Kernel();
@@ -40,14 +41,14 @@ abstract class TestCase extends \PHPUnit\Framework\TestCase
 
         $this->client = new HttpTestClient($this->kernel);
 
-        CacheManager::flush();
+        CacheManager::clear();
         EventDispatcher::flush();
     }
 
     protected function tearDown(): void
     {
         \HexaGen\Core\Auth\AuthManager::reset();
-        CacheManager::flush();
+        CacheManager::clear();
         EventDispatcher::flush();
         parent::tearDown();
     }

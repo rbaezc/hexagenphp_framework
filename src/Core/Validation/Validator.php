@@ -1,6 +1,8 @@
 <?php
 namespace HexaGen\Core\Validation;
 
+use HexaGen\Core\Database\Grammar;
+
 use HexaGen\Core\Database\DatabaseConnection;
 
 class Validator
@@ -63,8 +65,8 @@ class Validator
                     $rule === 'accepted' => $this->validateAccepted($field, $label, $value, $messages),
                     $rule === 'confirmed'=> $this->validateConfirmed($field, $label, $value, $data, $messages),
                     $rule === 'date'     => $this->validateDate($field, $label, $value, 'Y-m-d', $messages),
-                    str_starts_with($rule, 'min:')          => $this->validateMin($field, $label, $value, (int)substr($rule, 4), $messages),
-                    str_starts_with($rule, 'max:')          => $this->validateMax($field, $label, $value, (int)substr($rule, 4), $messages),
+                    str_starts_with($rule, 'min:')          => $this->validateMin($field, $label, $value, (float)substr($rule, 4), $messages),
+                    str_starts_with($rule, 'max:')          => $this->validateMax($field, $label, $value, (float)substr($rule, 4), $messages),
                     str_starts_with($rule, 'size:')         => $this->validateSize($field, $label, $value, (int)substr($rule, 5), $messages),
                     str_starts_with($rule, 'between:')      => $this->validateBetween($field, $label, $value, substr($rule, 8), $messages),
                     str_starts_with($rule, 'digits:')       => $this->validateDigits($field, $label, $value, (int)substr($rule, 7), $messages),
@@ -196,7 +198,7 @@ class Validator
         }
     }
 
-    private function validateMin(string $f, string $l, mixed $v, int $min, array $m): void
+    private function validateMin(string $f, string $l, mixed $v, float $min, array $m): void
     {
         $fail = is_numeric($v) ? ((float)$v < $min) : (mb_strlen((string)$v) < $min);
         if ($fail) {
@@ -204,7 +206,7 @@ class Validator
         }
     }
 
-    private function validateMax(string $f, string $l, mixed $v, int $max, array $m): void
+    private function validateMax(string $f, string $l, mixed $v, float $max, array $m): void
     {
         $fail = is_numeric($v) ? ((float)$v > $max) : (mb_strlen((string)$v) > $max);
         if ($fail) {
@@ -351,11 +353,11 @@ class Validator
 
         try {
             $pdo  = (new DatabaseConnection())->getPdo();
-            $sql  = "SELECT COUNT(*) FROM `{$table}` WHERE `{$column}` = :val";
+            $sql  = "SELECT COUNT(*) FROM " . Grammar::wrapFor($pdo, $table) . " WHERE " . Grammar::wrapFor($pdo, $column) . " = :val";
             $bind = [':val' => $v];
 
             if ($except !== null && preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $exceptColumn)) {
-                $sql   .= " AND `{$exceptColumn}` != :except";
+                $sql   .= " AND " . Grammar::wrapFor($pdo, $exceptColumn) . " != :except";
                 $bind[':except'] = $except;
             }
 
@@ -381,7 +383,7 @@ class Validator
 
         try {
             $pdo  = (new DatabaseConnection())->getPdo();
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM `{$table}` WHERE `{$column}` = :val");
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM " . Grammar::wrapFor($pdo, $table) . " WHERE " . Grammar::wrapFor($pdo, $column) . " = :val");
             $stmt->execute([':val' => $v]);
             if ((int)$stmt->fetchColumn() === 0) {
                 $this->addError($f, 'exists', "El valor seleccionado para $l no es válido.", $m);

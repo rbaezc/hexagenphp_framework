@@ -59,6 +59,9 @@ abstract class LiveComponent
     public function hydrateFromInput(array $input): void
     {
         foreach ($input as $key => $value) {
+            if (in_array($key, ['id', 'guarded'], true)) {
+                continue; // internos del componente, nunca desde el navegador
+            }
             if (property_exists($this, $key) && !in_array($key, $this->guarded, true)) {
                 $this->$key = $value;
             }
@@ -107,7 +110,10 @@ abstract class LiveComponent
      */
     protected function renderView(string $template, array $extraData = []): string
     {
-        $engine = new TemplateEngine();
+        $container = \HexaGen\Core\Kernel::getInstance()?->getContainer();
+        $engine    = ($container && $container->has(TemplateEngine::class))
+            ? $container->get(TemplateEngine::class)
+            : new TemplateEngine();
         
         // Combine model state and custom variables
         $data = array_merge($this->getState(), $extraData);
@@ -121,9 +127,9 @@ abstract class LiveComponent
         // Wrap the HTML with HTMX endpoints and target variables
         return sprintf(
             '<div id="%s" data-live-component="%s" data-live-state="%s" hx-target="this" hx-swap="outerHTML">%s</div>',
-            $this->id,
-            $componentName,
-            $stateToken,
+            htmlspecialchars($this->id, ENT_QUOTES),
+            htmlspecialchars($componentName, ENT_QUOTES),
+            htmlspecialchars($stateToken, ENT_QUOTES),
             $html
         );
     }
